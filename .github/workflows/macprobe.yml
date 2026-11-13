@@ -1,8 +1,0 @@
-name: macprobe
-on:
-  workflow_dispatch:
-jobs:
-  m:
-    runs-on: macos-latest
-    steps:
-      - run: echo "mac alive"; sw_vers; xcodebuild -version

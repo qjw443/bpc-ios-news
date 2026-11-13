@@ -18,7 +18,7 @@ struct ArticleView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         header(a)
                         Hairline().padding(.top, 18)
-                        body(a)
+                        contentBlocks(a)
                         footer(a)
                     }
                     .padding(.horizontal, 20)
@@ -103,7 +103,7 @@ struct ArticleView: View {
     // MARK: - 正文
 
     @ViewBuilder
-    private func body(_ a: Article) -> some View {
+    private func contentBlocks(_ a: Article) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             ForEach(a.blocks.indices, id: \.self) { i in
                 blockRow(a.blocks[i], showOriginal: showOriginal)
