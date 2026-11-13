@@ -37,6 +37,7 @@ struct FeedView: View {
     @State private var titleError = ""
     @State private var titleNonce = 0
     @State private var activeNonce = -1
+    @State private var titleTried: Set<String> = []   // 已尝试过的条目，避免翻译失败后死循环
 
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
     @Environment(\.scenePhase) private var scenePhase
@@ -113,7 +114,10 @@ struct FeedView: View {
             .onChange(of: scenePhase) { phase in
                 if phase == .active {
                     store.startMonitoring()
-                    store.refresh { translateTitles() }
+                    store.refresh {
+                        titleTried.removeAll()
+                        translateTitles()
+                    }
                 }
             }
             .onChange(of: store.items.count) { _ in translateTitles() }
@@ -393,6 +397,7 @@ struct FeedView: View {
     private func pull() async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             store.refresh {
+                titleTried.removeAll()
                 translateTitles()
                 cont.resume()
             }
@@ -421,8 +426,12 @@ struct FeedView: View {
     private func translateTitles() {
         guard Settings.zhMode == "sys" else { return }
         guard !titleBusy else { return }
-        let todo = Array(store.items.filter { $0.titleZh.isEmpty }.prefix(25))
+        let todo = Array(store.items
+            .filter { $0.titleZh.isEmpty && !titleTried.contains($0.id) }
+            .prefix(25))
         guard !todo.isEmpty else { return }
+        for it in todo { titleTried.insert(it.id) }
+        if titleTried.count > 800 { titleTried = Set(titleTried.suffix(400)) }
         titleIds = todo.map { $0.id }
         titleTexts = todo.map { $0.title }
         titleResults = []
