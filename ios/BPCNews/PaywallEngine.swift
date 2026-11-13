@@ -151,6 +151,7 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
     private var archiveTried = false
     private var botMode = false
     private var lastFinalURL = ""
+    private var googleTries = 0
 
     private var hardTimeout: DispatchWorkItem?
 
@@ -175,7 +176,7 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
                 self?.finish(.failure(FetchError.timeout))
             }
             self.hardTimeout = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 28, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 40, execute: work)
 
             wv.load(PaywallEngine.shared.request(for: url, site: site))
         }
@@ -185,14 +186,49 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         lastFinalURL = webView.url?.absoluteString ?? articleURL.absoluteString
-        // 还停在 Google 跳转页 → 立刻失败，别浪费 28 秒
+        // 还停在 Google 跳转页：它是个 JS 应用（600KB），要等它自己跳到发布方。
+        // 不能立刻判死 —— 真机上用户点 Google News 链接就是靠这套 JS 跳转的。
         if lastFinalURL.contains("news.google.com") {
-            finish(.failure(FetchError.loadFailed("Google 跳转页未解析出原文")))
+            watchGoogleRedirect()
             return
         }
         // 给付费墙脚本一点时间跑，再清理并取文
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
             self?.extract()
+        }
+    }
+
+    /// 轮询等待 Google 页的 JS 跳转；同时尝试从页面里直接挖发布方链接
+    private func watchGoogleRedirect() {
+        guard let wv = webView else { return }
+        let current = wv.url?.absoluteString ?? ""
+        if !current.contains("news.google.com") { return }   // 已跳走，等下一次 didFinish
+
+        googleTries += 1
+        if googleTries > 14 {
+            finish(.failure(FetchError.loadFailed("Google 跳转页未放行（网络受限），可用网页模式重试")))
+            return
+        }
+
+        wv.evaluateJavaScript("""
+        (function(){
+          var as = Array.from(document.querySelectorAll('a[href]'));
+          for (var i = 0; i < as.length; i++) {
+            var h = as[i].href || '';
+            if (h.indexOf('bloomberg.com') >= 0 || h.indexOf('reuters.com') >= 0) return h;
+          }
+          return '';
+        })();
+        """) { [weak self] res, _ in
+            guard let self = self else { return }
+            if let s = res as? String, !s.isEmpty, let u = URL(string: s) {
+                self.lastFinalURL = s
+                self.webView?.load(PaywallEngine.shared.request(for: u, site: self.site))
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                self.watchGoogleRedirect()
+            }
         }
     }
 

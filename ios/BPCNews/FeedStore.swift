@@ -99,17 +99,18 @@ final class FeedStore: ObservableObject {
             Discovery.resolve(item.url, session: session) { [weak self] resolved in
                 DispatchQueue.main.async {
                     guard let self = self else { return }
-                    guard resolved != item.url, resolved.hasPrefix("http") else {
-                        self.lastError = "Google 跳转未解析出原文地址（可能是网络被拦）"
-                        self.status = "取稿失败"
-                        completion?(nil)
-                        return
+                    // 解析不出来也没关系：Google 那个页面靠 JS 跳转，
+                    // 交给 WKWebView 执行（PaywallEngine 里会监视跳转）。
+                    if resolved != item.url, resolved.hasPrefix("http") {
+                        Library.shared.updateURL(item.id, to: resolved)
+                        self.items = Library.shared.items
+                        var it = item
+                        it.url = resolved
+                        self.startFetch(item: it, silent: silent, completion: completion)
+                    } else {
+                        self.status = "经 Google 跳转打开…"
+                        self.startFetch(item: item, silent: silent, completion: completion)
                     }
-                    Library.shared.updateURL(item.id, to: resolved)
-                    self.items = Library.shared.items
-                    var it = item
-                    it.url = resolved
-                    self.startFetch(item: it, silent: silent, completion: completion)
                 }
             }
             return
