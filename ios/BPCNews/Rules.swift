@@ -301,6 +301,15 @@ enum Rules {
     /// 华尔街日报（中文站结构不同，但同属付费墙，复用同一套）
     static let extractWSJ = extractPaywalled
 
+    /// 按站点选择提取脚本
+    static func extractJS(for site: Site) -> String {
+        switch site {
+        case .bloomberg: return extractBloomberg
+        case .reuters: return extractReuters
+        case .wsj: return extractWSJ
+        }
+    }
+
     static let extractArchive = #"""
     (function(){
       var out={title:'',blocks:[],summary:[],audio:'',via:'archive',walls:[]};
@@ -319,8 +328,10 @@ enum Rules {
     // MARK: - 文案
 
     static func hint(for site: Site) -> String {
-        site == .bloomberg
-            ? "已拦 fence 客户端 · 已去 articleBlur 模糊 · 已清计量计数"
-            : "已拦 arc/subs · 已清 cookie 与遮罩"
+        switch site {
+        case .bloomberg: return "已拦 fence 客户端 · 已去 articleBlur 模糊 · 已清计量计数"
+        case .reuters: return "已拦 arc/subs · 已拆遮罩 · 已清计量"
+        case .wsj: return "已拦订阅脚本 · 已拆遮罩 · 已清计量"
+        }
     }
 }
