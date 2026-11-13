@@ -45,6 +45,7 @@ jobs:
       - name: Build (code signing disabled)
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild \
             -project BPCNews.xcodeproj \
             -scheme BPCNews \
@@ -56,8 +57,20 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_ENTITLEMENTS="" \
-            build 2>&1 | tail -80
-          test -d build/Build/Products/Release-iphoneos/BPCNews.app
+            build 2>&1 | tee build.log | tail -80
+          echo "---- 断言产物 ----"
+          APP="build/Build/Products/Release-iphoneos/BPCNews.app"
+          test -d "$APP"
+          test -f "$APP/BPCNews"
+          echo "binary ok: $(ls -lh "$APP/BPCNews" | awk '{print $5}')"
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ios/build.log
+          if-no-files-found: ignore
 
       - name: Package unsigned IPA
         working-directory: ios

@@ -126,7 +126,7 @@ struct ReaderView: View {
     @ViewBuilder
     private func blockRow(_ b: Block, showOriginal: Bool) -> some View {
         let zh = b.zh
-        let text = showOriginal ? b.text : ((zh?.isEmpty == false) ? zh! : b.text)
+        let text = showOriginal ? b.text : (zh.isEmpty ? b.text : zh)
 
         switch b.type {
         case "h2":

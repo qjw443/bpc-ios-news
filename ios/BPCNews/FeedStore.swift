@@ -37,7 +37,7 @@ final class FeedStore: ObservableObject {
 
         discovery.poll { [weak self] found in
             guard let self = self else { return }
-            let enabled = Settings.enabledSites()
+            let enabled = Settings.enabledSites
             var mapped: [FeedItem] = []
             for f in found where enabled.contains(f.site.rawValue) {
                 let title = Self.cleanTitle(f.title)
