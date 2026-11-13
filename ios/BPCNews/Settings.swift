@@ -18,7 +18,15 @@ enum Settings {
         return out.isEmpty ? ["bloomberg", "reuters"] : out
     }
 
-    // 抓取
+    // 发现
+    /// 只收多少小时内的稿子（彭博 sitemap 会带出 60+ 小时的旧闻，必须截断）
+    static var freshHours: Int {
+        let v = UserDefaults.standard.integer(forKey: "fresh_hours")
+        return v == 0 ? 24 : v
+    }
+    /// 推送只看多少分钟内的稿子（避免一次推一堆历史）
+    static let pushWindowMinutes = 120
+
     static var autoFetch: Bool {
         UserDefaults.standard.object(forKey: "auto_fetch") == nil
             ? true

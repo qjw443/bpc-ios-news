@@ -39,29 +39,55 @@ final class FeedStore: ObservableObject {
         busy = true
         DispatchQueue.main.async { self.loading = true; self.lastError = "" }
 
+        // 看门狗：poll 不回调（网络挂住）时把状态复位，避免刷新键变死键
+        var finished = false
+        let watchdog = DispatchWorkItem { [weak self] in
+            guard let self = self, !finished else { return }
+            finished = true
+            self.busy = false
+            DispatchQueue.main.async {
+                self.loading = false
+                self.lastError = "发现超时（50s），请重试"
+                self.status = "超时"
+            }
+            completion?()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 50, execute: watchdog)
+
         discovery.poll { [weak self] found in
             guard let self = self else { return }
+            guard !finished else { return }
+            finished = true
+            watchdog.cancel()
+
             let enabled = Settings.enabledSites
+            let cutoff = Date().addingTimeInterval(-Double(Settings.freshHours) * 3600)
             var mapped: [FeedItem] = []
+            var skippedOld = 0
+
             for f in found where enabled.contains(f.site.rawValue) {
+                // 时间窗：sitemap 会带出几十小时前的稿子，超出窗口直接丢
+                let date = f.date ?? Date()
+                if date < cutoff { skippedOld += 1; continue }
+
                 let title = Self.cleanTitle(f.title)
-                // 过滤 Google News 里的垃圾条目：只有站点名、过短、栏目页
                 let low = title.lowercased()
                 if title.count < 16 { continue }
                 if ["bloomberg", "reuters", "bloomberg.com", "reuters.com"].contains(low) { continue }
                 if low.hasPrefix("transcript") || low.hasPrefix("watch:") || low.hasPrefix("listen") { continue }
+
                 let id = Hash.short(f.link + "|" + title)
                 var item = FeedItem(id: id,
                                     site: f.site,
                                     title: title,
                                     url: f.link,
-                                    ts: Int((f.date ?? Date()).timeIntervalSince1970))
-                // 词典模式：列表标题当场中文化，不用等正文
+                                    ts: Int(date.timeIntervalSince1970))
                 if Settings.zhMode == "dict" {
                     item.titleZh = Dict.translate(title)
                 }
                 mapped.append(item)
             }
+
             let fresh = Library.shared.merge(mapped)
             let bbg = mapped.filter { $0.site == .bloomberg }.count
             let rtr = mapped.count - bbg
@@ -69,13 +95,17 @@ final class FeedStore: ObservableObject {
                 self.items = Library.shared.items
                 self.loading = false
                 self.busy = false
-                self.status = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
+                var s = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
+                if skippedOld > 0 { s += " · 滤除旧闻 \(skippedOld)" }
+                self.status = s
                 UserDefaults.standard.set(Int(Date().timeIntervalSince1970), forKey: self.lastCheckKey)
             }
-            if notify && !fresh.isEmpty { self.notifyNew(fresh) }
+
+            // 推送只针对窗口内的新稿，避免一次推几十条历史
+            let pushCut = Int(Date().timeIntervalSince1970) - Settings.pushWindowMinutes * 60
+            let pushable = fresh.filter { $0.ts >= pushCut }
+            if notify && !pushable.isEmpty { self.notifyNew(pushable) }
             completion?()
-            // 注意：这里刻意「不」自动抓正文。
-            // 165 条列表只是标题流；正文只在用户点开某一条时才抓（省流量、少被墙、少触发风控）。
         }
     }
 
@@ -86,7 +116,8 @@ final class FeedStore: ObservableObject {
             completion?(cached)
             return
         }
-        guard fetchers[item.id] == nil else { completion?(nil); return }
+        // 已在抓取中：保持加载态，不回调失败（否则用户二次点击会看到假错误）
+        guard fetchers[item.id] == nil else { return }
         startFetch(item: item, silent: silent, completion: completion)
     }
 

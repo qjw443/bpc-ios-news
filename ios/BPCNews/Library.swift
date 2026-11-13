@@ -103,20 +103,36 @@ final class Library {
         try? d.write(to: feedURL, options: .atomic)
     }
 
-    /// 合并发现结果，返回「新入库」的条目
+    /// 合并发现结果，返回「新入库」的条目。
+    /// 去重两条线：① id（URL+标题）② 规范化 URL（同一篇从 sitemap 与 RSS 各来一次时）
     @discardableResult
     func merge(_ found: [FeedItem], limit: Int = 300) -> [FeedItem] {
-        var seen = Set(items.map { $0.id })
+        var seenIds = Set(items.map { $0.id })
+        var seenURLs = Set(items.map { Self.normURL($0.url) })
         var fresh: [FeedItem] = []
-        for it in found where !seen.contains(it.id) {
+
+        for it in found {
+            if seenIds.contains(it.id) { continue }
+            let key = Self.normURL(it.url)
+            if seenURLs.contains(key) { continue }
             items.append(it)
-            seen.insert(it.id)
+            seenIds.insert(it.id)
+            seenURLs.insert(key)
             fresh.append(it)
         }
         items.sort { $0.ts > $1.ts }
         if items.count > limit { items = Array(items.prefix(limit)) }
         persistFeed()
         return fresh
+    }
+
+    /// URL 规范化：去掉查询串/尾部斜杠、统一 www 与 https，用于判重
+    static func normURL(_ s: String) -> String {
+        var u = s.split(separator: "?").first.map(String.init) ?? s
+        u = u.replacingOccurrences(of: "https://www.", with: "https://")
+        u = u.replacingOccurrences(of: "http://", with: "https://")
+        while u.hasSuffix("/") { u.removeLast() }
+        return u.lowercased()
     }
 
     func markFetched(_ id: String, article: Article) {

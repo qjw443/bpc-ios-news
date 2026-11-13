@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage("src_bloomberg") private var srcBloomberg: Bool = true
     @AppStorage("src_reuters") private var srcReuters: Bool = true
     @AppStorage("auto_fetch") private var autoFetch: Bool = true
+    @AppStorage("fresh_hours") private var freshHours: Int = 24
     @AppStorage("translate_on_open") private var translateOnOpen: Bool = false
     @AppStorage("zh_mode") private var zhMode: String = "dict"
     @AppStorage("llm_url") private var llmURL: String = "https://api.deepseek.com/chat/completions"
@@ -124,10 +125,18 @@ struct SettingsView: View {
             LabeledContent("待读条数") {
                 Text("\(store.pendingCount) 条").font(.mono(11)).foregroundColor(Theme.inkDim)
             }
+            Picker(selection: $freshHours) {
+                Text("最近 6 小时").tag(6)
+                Text("最近 12 小时").tag(12)
+                Text("最近 24 小时").tag(24)
+                Text("最近 48 小时").tag(48)
+            } label: {
+                Text("时间窗").foregroundColor(Theme.ink)
+            }
         } header: {
             Kicker(text: "发现").padding(.bottom, 2)
         } footer: {
-            Text("这里只拉标题流（Google News，分钟级）。正文只在你点开某一条时才在本机抓取，不会后台批量抓。iOS 后台刷新由系统调度，前台每 60 秒一轮。")
+            Text("这里只拉标题流（彭博 sitemap/RSS + 路透官方源）。时间窗会把站点带出的旧闻截掉；正文只在你点开某一条时才在本机抓取。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)

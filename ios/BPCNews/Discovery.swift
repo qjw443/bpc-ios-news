@@ -125,19 +125,68 @@ final class Discovery: NSObject {
                 completion([], note)
                 return
             }
-            let found = self.parse(data, site: ep.site, kind: ep.kind)
-            completion(found, found.isEmpty ? "解析为 0 条" : "\(found.count) 条")
+            let (items, children) = self.parse(data, site: ep.site)
+            // sitemapindex：本身没有文章，要下钻子 sitemap（路透官方源就是这种）
+            if items.isEmpty && !children.isEmpty {
+                self.fetchChildren(children, site: ep.site, depth: 0) { childItems in
+                    let note = childItems.isEmpty
+                        ? "索引 \(children.count) 个子图均无文章"
+                        : "\(childItems.count) 条（下钻 \(min(children.count, 3)) 个子图）"
+                    completion(childItems, note)
+                }
+                return
+            }
+            completion(items, items.isEmpty ? "解析为 0 条" : "\(items.count) 条")
         }.resume()
+    }
+
+    /// 下钻 sitemapindex 的子 sitemap（最多 3 个、最多 2 层）
+    private func fetchChildren(_ urls: [String], site: Site, depth: Int,
+                               completion: @escaping ([Discovery.Found]) -> Void) {
+        guard depth < 2, !urls.isEmpty else {
+            completion([])
+            return
+        }
+        let picked = Array(urls.prefix(3))
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var out: [Discovery.Found] = []
+
+        for u in picked {
+            guard let url = URL(string: u) else { continue }
+            group.enter()
+            var req = URLRequest(url: url, timeoutInterval: 20)
+            req.setValue(Self.uas[1], forHTTPHeaderField: "User-Agent")
+            session.dataTask(with: req) { data, resp, _ in
+                guard let data = data, (resp as? HTTPURLResponse)?.statusCode == 200 else {
+                    group.leave()
+                    return
+                }
+                let (items, children) = self.parse(data, site: site)
+                lock.lock(); out.append(contentsOf: items); lock.unlock()
+                if items.isEmpty && !children.isEmpty {
+                    self.fetchChildren(children, site: site, depth: depth + 1) { more in
+                        lock.lock(); out.append(contentsOf: more); lock.unlock()
+                        group.leave()
+                    }
+                } else {
+                    group.leave()
+                }
+            }.resume()
+        }
+        group.notify(queue: .main) { completion(out) }
     }
 
     // MARK: - XML 解析（RSS / sitemap / sitemapindex 三合一）
 
-    private func parse(_ data: Data, site: Site, kind: Sources.Kind) -> [Discovery.Found] {
+    private func parse(_ data: Data, site: Site)
+        -> (items: [Discovery.Found], children: [String]) {
         let p = FeedParser(site: site)
         let xp = XMLParser(data: data)
         xp.delegate = p
         xp.parse()
-        return p.items.filter { Sources.isArticleURL($0.link, site: site) }
+        let items = p.items.filter { Sources.isArticleURL($0.link, site: site) }
+        return (items, p.childSitemaps)
     }
 
     // MARK: - 网页通道
@@ -171,6 +220,8 @@ final class FeedParser: NSObject, XMLParserDelegate {
 
     private let site: Site
     private(set) var items: [Discovery.Found] = []
+    /// sitemapindex 里的子 sitemap 地址（如路透官方 news-sitemap-index）
+    private(set) var childSitemaps: [String] = []
 
     private var stack: [String] = []
     private var buf = ""
@@ -183,6 +234,7 @@ final class FeedParser: NSObject, XMLParserDelegate {
 
     // sitemap 状态
     private var inURL = false
+    private var inSitemapNode = false
     private var smLoc = ""
     private var smLastmod = ""
     private var smDate = ""
@@ -205,6 +257,9 @@ final class FeedParser: NSObject, XMLParserDelegate {
         } else if name == "url" {
             inURL = true
             smLoc = ""; smLastmod = ""; smDate = ""; smTitle = ""
+        } else if name == "sitemap" {          // sitemapindex 的子项
+            inSitemapNode = true
+            smLoc = ""
         }
     }
 
@@ -237,6 +292,17 @@ final class FeedParser: NSObject, XMLParserDelegate {
                                        link: rssLink,
                                        date: Self.parseDate(rssDate)))
                 }
+            default: break
+            }
+            return
+        }
+
+        if inSitemapNode {
+            switch name {
+            case "loc": smLoc = text
+            case "sitemap":
+                inSitemapNode = false
+                if smLoc.count > 10 { childSitemaps.append(smLoc) }
             default: break
             }
             return
