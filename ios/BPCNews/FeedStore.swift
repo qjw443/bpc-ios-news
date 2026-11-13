@@ -29,6 +29,8 @@ final class FeedStore: ObservableObject {
     @Published var bbgLatency: Int = -1
     @Published var rtrLatency: Int = -1
     @Published var lastRoundMs: Int = -1
+    /// 每有新稿入库 +1：界面观察它就能「持续」触发翻译，而不依赖用户操作
+    @Published var newItemsToken: Int = 0
 
     var latencyText: String {
         func fmt(_ s: Int) -> String {
@@ -185,6 +187,7 @@ final class FeedStore: ObservableObject {
                 self.lastRoundMs = roundMs
                 var s = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
                 if skippedOld > 0 { s += " · 滤除旧闻 \(skippedOld)" }
+                if !fresh.isEmpty { self.newItemsToken += 1 }
                 self.status = s
                 self.lastCheck = Int(Date().timeIntervalSince1970)
                 UserDefaults.standard.set(self.lastCheck, forKey: "last_check_ts")
@@ -323,6 +326,7 @@ final class FeedStore: ObservableObject {
             content.threadIdentifier = first.site.rawValue
             content.categoryIdentifier = "BPC_NEWS"
             content.userInfo = ["itemId": first.id]
+            content.badge = NSNumber(value: Library.shared.unreadCount)
             // 用 1 秒触发器：比 nil 更稳（nil 在部分系统版本上会被合并或静默丢弃）
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             let req = UNNotificationRequest(identifier: UUID().uuidString,

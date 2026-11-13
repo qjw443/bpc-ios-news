@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
         registerNotificationCategory()
         requestNotificationPermission()
+        refreshNotificationAuthorization()
         FeedStore.shared.bootstrap()
         FeedStore.shared.startMonitoring()
         if Settings.keepAlive { SilentKeeper.start() }
@@ -47,6 +48,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
+        refreshNotificationAuthorization()
         SilentKeeper.stop()
         FeedStore.shared.startMonitoring()
         FeedStore.shared.refresh()
@@ -67,8 +69,31 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { ok, err in
             UserDefaults.standard.set(ok, forKey: "notif_authorized")
             if let err = err { print("[notif] auth error: \(err.localizedDescription)") }
-            // 被拒时给出可见提示（设置页也会显示状态）
             print("[notif] authorized=\(ok)")
+            if ok { Self.autoTestIfNeeded() }
+        }
+    }
+
+    /// 复核授权（用户可能刚在系统设置里打开），并在首次授权后自动发一条测试通知
+    func refreshNotificationAuthorization() {
+        UNUserNotificationCenter.current().getNotificationSettings { s in
+            let ok = [UNAuthorizationStatus.authorized, .provisional, .ephemeral].contains(s.authorizationStatus)
+            UserDefaults.standard.set(ok, forKey: "notif_authorized")
+            print("[notif] status=\(s.authorizationStatus.rawValue) authorized=\(ok)")
+            if s.authorizationStatus == .notDetermined {
+                self.requestNotificationPermission()
+            } else if ok {
+                Self.autoTestIfNeeded()
+            }
+        }
+    }
+
+    /// 首次授权成功后自动发一条，确保用户能看到通知链路是通的
+    private static func autoTestIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: "did_auto_test_notif") else { return }
+        UserDefaults.standard.set(true, forKey: "did_auto_test_notif")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            sendTestNotification()
         }
     }
 

@@ -135,6 +135,8 @@ struct FeedView: View {
                 }
             }
             .onChange(of: store.items.count) { _ in translateTitles() }
+            // 关键：数据层每有新稿就 +1，不管刷新来自前台定时器还是后台任务
+            .onChange(of: store.newItemsToken) { _ in translateTitles() }
             .onReceive(openItem) { note in
                 if let id = note.object as? String {
                     path = [id]
@@ -187,7 +189,10 @@ struct FeedView: View {
                         .font(.system(size: 20, weight: .heavy))
                         .tracking(1.2)
                         .foregroundColor(Theme.ink)
+                    HStack(spacing: 6) {
                     Kicker(text: "BLOOMBERG · REUTERS　本机直连", size: 8.5)
+                    countdownPill
+                }
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 6) {
@@ -240,6 +245,26 @@ struct FeedView: View {
     }
 
     private var unreadCount: Int { store.items.filter { !$0.read }.count }
+
+    /// 下一个自动刷新倒计时（金融场景要能看到「下一次更新还有多久」）
+    private var countdownPill: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let interval = max(15, Settings.pollSeconds)
+            let elapsed = Int(ctx.date.timeIntervalSince1970) - store.lastCheck
+            let left = max(0, interval - elapsed)
+            HStack(spacing: 3) {
+                Circle()
+                    .fill(store.loading ? Theme.orange : Theme.hairline)
+                    .frame(width: 3.5, height: 3.5)
+                Text(store.loading ? "更新中" : "\(left)s")
+                    .font(.mono(9))
+                    .foregroundColor(store.loading ? Theme.orange : Theme.inkDim)
+            }
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(Theme.surface)
+            .clipShape(Capsule())
+        }
+    }
 
     // MARK: - 指标区（企业看板风格）
 
