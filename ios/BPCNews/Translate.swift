@@ -28,10 +28,43 @@ enum Translator {
     }
 
     static func translate(_ article: Article, completion: @escaping (Result<Article, Error>) -> Void) {
+        // ① 关闭
+        if Settings.zhMode == "off" {
+            completion(.success(article))
+            return
+        }
+        // ② 离线词典（默认；无需网络、无需 Key）
+        if Settings.zhMode == "dict" || Settings.llmKey.isEmpty {
+            completion(.success(dictionary(article)))
+            return
+        }
+        // ③ LLM 整句翻译
         guard !Settings.llmKey.isEmpty else {
             completion(.failure(TranslateError.noKey))
             return
         }
+        llmTranslate(article, completion: completion)
+    }
+
+    /// 离线词典：术语级替换，纯本地、瞬时完成
+    static func dictionary(_ article: Article) -> Article {
+        var art = article
+        for i in art.blocks.indices {
+            let b = art.blocks[i]
+            if b.type == "img" || b.type == "hr" { continue }
+            art.blocks[i].zh = Dict.translate(b.text)
+        }
+        art.titleZh = Dict.translate(art.title)
+        if art.brief.isEmpty {
+            art.brief = art.blocks.filter { $0.type == "p" }
+                .prefix(3)
+                .map { String(Dict.translate($0.text).prefix(46)) }
+        }
+        return art
+    }
+
+    private static func llmTranslate(_ article: Article,
+                                     completion: @escaping (Result<Article, Error>) -> Void) {
         var art = article
         let todo = art.blocks.enumerated().filter { _, b in
             b.zh.isEmpty && (b.type == "p" || b.type == "h2" || b.type == "quote" || b.type == "li")

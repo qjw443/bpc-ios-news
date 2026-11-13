@@ -175,7 +175,7 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
                 self?.finish(.failure(FetchError.timeout))
             }
             self.hardTimeout = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 45, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 28, execute: work)
 
             wv.load(PaywallEngine.shared.request(for: url, site: site))
         }
@@ -185,6 +185,11 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         lastFinalURL = webView.url?.absoluteString ?? articleURL.absoluteString
+        // 还停在 Google 跳转页 → 立刻失败，别浪费 28 秒
+        if lastFinalURL.contains("news.google.com") {
+            finish(.failure(FetchError.loadFailed("Google 跳转页未解析出原文")))
+            return
+        }
         // 给付费墙脚本一点时间跑，再清理并取文
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
             self?.extract()

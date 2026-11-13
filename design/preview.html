@@ -2,222 +2,193 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>BPC MARKETS · 视觉稿</title>
+<title>BPC News v2 · 三屏渲染稿</title>
 <style>
-  :root{
-    --bg:#000; --surface:#0C0C0D; --raised:#161617; --line:#252527;
-    --ink:#F5F5F4; --dim:#8B8B8F; --orange:#FF6B00;
-  }
+  :root{--bg:#000;--surface:#0C0C0D;--raised:#161617;--line:#252527;--ink:#F5F5F4;--dim:#8B8B8F;--orange:#FF6B00}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{
-    background:#0a0a0a; color:var(--ink);
-    font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    padding:48px 24px 80px; display:flex; flex-wrap:wrap; gap:48px;
-    justify-content:center; align-items:flex-start;
-  }
-  .stage{display:flex;flex-direction:column;gap:14px;align-items:center}
-  .stage h4{font-size:11px;letter-spacing:2px;color:var(--dim);font-weight:600;text-transform:uppercase}
-  .phone{
-    width:375px;height:812px;background:var(--bg);border:1px solid #1c1c1e;
-    border-radius:44px;overflow:hidden;position:relative;
-    box-shadow:0 30px 80px rgba(0,0,0,.8);
-  }
-  .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);
-    width:110px;height:26px;background:#000;border-radius:20px;z-index:9}
-  .screen{position:absolute;inset:0;padding:52px 0 0;overflow:hidden}
+  body{background:#080808;color:var(--ink);display:flex;gap:40px;padding:40px 36px;
+       font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;align-items:flex-start}
+  .stage{display:flex;flex-direction:column;gap:12px;align-items:center}
+  .cap{font-size:10px;letter-spacing:2px;color:var(--dim);font-weight:600;text-transform:uppercase}
+  .phone{width:340px;height:738px;background:var(--bg);border:1px solid #1c1c1e;border-radius:40px;
+         position:relative;overflow:hidden;box-shadow:0 26px 70px rgba(0,0,0,.85)}
+  .notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:100px;height:24px;background:#000;border-radius:18px;z-index:9}
+  .screen{position:absolute;inset:0;padding:46px 0 0;overflow:hidden}
 
-  /* ---------- 报头 ---------- */
-  .mast{padding:6px 18px 0}
-  .mast .row1{display:flex;justify-content:space-between;align-items:flex-start}
-  .brand{font-size:17px;font-weight:900;letter-spacing:3.4px}
-  .sub{font-size:9px;letter-spacing:1.8px;color:var(--dim);font-weight:600;margin-top:4px;text-transform:uppercase}
-  .gear{width:31px;height:31px;background:var(--raised);border-radius:8px}
-  .row2{display:flex;align-items:center;gap:7px;margin-top:9px}
+  /* 报头 */
+  .mast{padding:4px 16px 0}
+  .row1{display:flex;justify-content:space-between;align-items:flex-start}
+  .brand{font-size:16px;font-weight:900;letter-spacing:3.2px}
+  .sub{font-size:8.5px;letter-spacing:1.7px;color:var(--dim);font-weight:600;margin-top:3px;text-transform:uppercase}
+  .icons{display:flex;gap:6px}
+  .icon{width:29px;height:29px;background:var(--raised);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink)}
+  .row2{display:flex;align-items:center;gap:6px;margin-top:8px}
   .dot{width:5px;height:5px;border-radius:50%;background:var(--orange)}
-  .k{font-size:9px;letter-spacing:1.8px;font-weight:600;color:var(--dim);text-transform:uppercase}
+  .k{font-size:8.5px;letter-spacing:1.6px;font-weight:600;color:var(--dim);text-transform:uppercase}
   .k.orange{color:var(--orange)}
-  .hr{height:.5px;background:var(--line);margin-top:9px}
+  .k.red{color:#ff5c4d}
+  .hr{height:.5px;background:var(--line);margin-top:8px}
 
-  /* ---------- 列表 ---------- */
-  .item{padding:17px 18px}
-  .meta{display:flex;align-items:center;gap:8px;margin-bottom:9px}
-  .tag{font-size:9px;font-weight:900;letter-spacing:1.2px;padding:2.5px 5px;border-radius:2px;color:#000}
-  .tag.bbg{background:var(--ink)}
-  .tag.rtr{background:var(--orange)}
-  .arrow{margin-left:auto;font-size:9px;color:var(--line);font-weight:900}
-  .head{
-    font-family:"New York","Songti SC","Times New Roman",serif;
-    font-size:19px;font-weight:700;line-height:1.42;letter-spacing:.1px;
-  }
-  .brief{font-size:12.5px;color:var(--dim);line-height:1.75;margin-top:9px}
-  .sep{height:.5px;background:var(--line);margin-left:18px}
+  /* 列表 */
+  .item{padding:15px 16px}
+  .meta{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+  .tag{font-size:8.5px;font-weight:900;letter-spacing:1.1px;padding:2px 5px;border-radius:2px;color:#000}
+  .tag.bbg{background:var(--ink)} .tag.rtr{background:var(--orange)}
+  .ok{margin-left:auto;font-size:9px;color:var(--line)}
+  .head{font-family:"New York","Songti SC","Times New Roman",serif;font-size:18px;font-weight:700;line-height:1.4}
+  .suben{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5}
+  .sep{height:.5px;background:var(--line);margin-left:16px}
 
-  /* ---------- 文章页 ---------- */
-  .art{padding:0 20px;overflow-y:auto;height:100%}
-  .art .kicker{display:flex;gap:8px;align-items:center;padding-top:10px}
-  .art h1{
-    font-family:"New York","Songti SC","Times New Roman",serif;
-    font-size:28px;line-height:1.35;font-weight:700;margin-top:14px;letter-spacing:-.2px;
-  }
-  .takeaways{margin-top:14px}
-  .takeaways .row{display:flex;gap:8px;margin-top:8px}
-  .bar{width:2px;background:var(--orange);flex:0 0 2px}
-  .takeaways p{font-size:13px;color:var(--dim);line-height:1.7}
-  .body{margin-top:18px}
-  .body p{font-size:16px;line-height:1.85;color:#E6E6E5;margin-bottom:16px}
-  .body h2{
-    font-family:"New York","Songti SC","Times New Roman",serif;
-    font-size:20px;font-weight:600;margin:22px 0 14px;
-  }
-  .quote{display:flex;gap:12px;margin:6px 0 18px}
+  /* 阅读页 */
+  .art{padding:0 18px 74px;position:relative;height:100%}
+  .kicker{display:flex;gap:7px;align-items:center;padding-top:8px}
+  .art h1{font-family:"New York","Songti SC","Times New Roman",serif;font-size:25px;line-height:1.34;margin-top:12px}
+  .arten{font-family:"New York","Songti SC","Times New Roman",serif;font-size:13px;color:var(--dim);margin-top:8px;line-height:1.45}
+  .body{margin-top:16px}
+  .body p{font-size:14.5px;line-height:1.8;color:#E6E6E5;margin-bottom:13px}
+  .body h2{font-family:"New York","Songti SC","Times New Roman",serif;font-size:17px;margin:18px 0 11px}
+  .quote{display:flex;gap:10px;margin:4px 0 14px}
   .quote .bar{width:2px;background:var(--orange)}
-  .quote p{
-    font-family:"New York","Songti SC","Times New Roman",serif;
-    font-style:italic;font-size:17px;line-height:1.8;color:#DBDBD9;margin:0;
-  }
-  .src{margin-top:22px;padding-bottom:74px}
-  .src a{color:var(--orange);font-size:13px;font-weight:600;text-decoration:none}
-  .bottom{
-    position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.96);
-    border-top:.5px solid var(--line);padding:9px 18px;display:flex;align-items:center;gap:10px;
-  }
-  .play{width:38px;height:32px;background:var(--raised);border-radius:8px;
-    display:flex;align-items:center;justify-content:center;font-size:11px}
-  .seg{margin-left:auto;display:flex;gap:0;background:var(--raised);border-radius:9px;padding:3px}
-  .seg span{font-size:12px;font-weight:600;padding:6px 16px;border-radius:7px;color:var(--dim)}
+  .quote p{font-family:"New York","Songti SC","Times New Roman",serif;font-style:italic;font-size:15px;line-height:1.75;color:#DBDBD9;margin:0}
+  .via{margin-top:16px;font-size:8px;letter-spacing:1.4px;color:#4a4a4d;text-transform:uppercase}
+  .bottom{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.97);border-top:.5px solid var(--line);
+          padding:8px 16px;display:flex;align-items:center;gap:8px}
+  .pill{font-size:11px;color:var(--ink);background:var(--raised);padding:6px 10px;border-radius:8px}
+  .seg{margin-left:auto;display:flex;background:var(--raised);border-radius:9px;padding:3px}
+  .seg span{font-size:11px;font-weight:600;padding:5px 13px;border-radius:7px;color:var(--dim)}
   .seg span.on{background:var(--ink);color:#000}
 
-  /* ---------- 色板 ---------- */
-  .palette{max-width:375px}
-  .palette h3{font-size:11px;letter-spacing:2px;color:var(--dim);font-weight:600;text-transform:uppercase;margin-bottom:14px}
-  .sw{display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:12px;color:var(--dim)}
-  .chip{width:34px;height:34px;border-radius:6px;border:1px solid #222}
-  .note{font-size:12px;line-height:1.9;color:#6d6d70;margin-top:20px}
-  .note b{color:#A8A8AC;font-weight:600}
+  /* 设置页 */
+  .set{padding:0 16px;height:100%;overflow:hidden}
+  .grp{margin-top:14px}
+  .grp .t{font-size:8.5px;letter-spacing:1.7px;color:var(--dim);font-weight:600;text-transform:uppercase;margin-bottom:6px}
+  .card{background:var(--surface);border-radius:10px;overflow:hidden}
+  .r{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border-bottom:.5px solid var(--line);font-size:12.5px}
+  .r:last-child{border-bottom:none}
+  .r .v{font-size:10.5px;color:var(--dim);font-family:ui-monospace,Menlo,monospace}
+  .r .o{color:var(--orange)}
+  .sw{width:34px;height:19px;background:var(--orange);border-radius:10px;position:relative}
+  .sw::after{content:"";position:absolute;right:2px;top:2px;width:15px;height:15px;background:#fff;border-radius:50%}
+  .sw.off{background:#2a2a2c}
+  .sw.off::after{right:17px;background:#6a6a6d}
+  .warn{color:#ff8c33;font-size:10px}
 </style>
 </head>
 <body>
 
-  <!-- ============ 列表页 ============ -->
-  <div class="stage">
-    <h4>Feed · 财经速递</h4>
-    <div class="phone">
-      <div class="notch"></div>
-      <div class="screen">
-        <div class="mast">
-          <div class="row1">
-            <div>
-              <div class="brand">BPC MARKETS</div>
-              <div class="sub">Bloomberg · Reuters　中文速递</div>
-            </div>
-            <div class="gear"></div>
-          </div>
-          <div class="row2">
-            <span class="dot"></span><span class="k orange">实时</span>
-            <span class="k" style="margin-left:auto">37 条 · 每 60 秒</span>
-          </div>
-          <div class="hr"></div>
-        </div>
+<!-- ===== 1. 列表 ===== -->
+<div class="stage">
+  <div class="cap">Feed · 本机直连</div>
+  <div class="phone"><div class="notch"></div><div class="screen">
+    <div class="mast">
+      <div class="row1">
+        <div><div class="brand">BPC MARKETS</div><div class="sub">Bloomberg · Reuters　本机直连</div></div>
+        <div class="icons"><div class="icon">⚡</div><div class="icon">☰</div></div>
+      </div>
+      <div class="row2"><span class="dot"></span><span class="k orange">发现 41 条 / 新增 6 条</span><span class="k" style="margin-left:auto">37 条</span></div>
+      <div class="hr"></div>
+    </div>
 
-        <div class="item">
-          <div class="meta"><span class="tag bbg">BLOOMBERG</span>
-            <span class="k">12 分钟前</span><span class="arrow">↗</span></div>
-          <div class="head">美联储官员暗示 12 月降息门槛抬升，美元指数站上 105</div>
-          <div class="brief">三位票委在公开讲话中强调通胀黏性　／　隔夜指数掉期隐含降息概率降至 38%　／　两年期美债收益率上行 6 个基点</div>
-        </div>
-        <div class="sep"></div>
+    <div class="item">
+      <div class="meta"><span class="tag bbg">BLOOMBERG</span><span class="k">12 分钟前</span><span class="ok">✓</span></div>
+      <div class="head">美联储官员暗示 12 月降息门槛抬升，美元指数站上 105</div>
+      <div class="suben">Fed Officials Signal Higher Bar for December Cut</div>
+    </div><div class="sep"></div>
 
-        <div class="item">
-          <div class="meta"><span class="tag rtr">REUTERS</span>
-            <span class="k">27 分钟前</span><span class="arrow">↗</span></div>
-          <div class="head">英伟达对华芯片销售许可获批，供应链预计四季度出货回升</div>
-          <div class="brief">美国商务部批准 H20 系列对华出口　／　台积电 CoWoS 产能利用率回到 92%</div>
-        </div>
-        <div class="sep"></div>
+    <div class="item">
+      <div class="meta"><span class="tag rtr">REUTERS</span><span class="k">27 分钟前</span><span class="ok">✓</span></div>
+      <div class="head">英伟达对华芯片销售许可获批，供应链预计四季度出货回升</div>
+      <div class="suben">Nvidia Wins China Chip License, Supply Chain Sees Q4 Rebound</div>
+    </div><div class="sep"></div>
 
-        <div class="item">
-          <div class="meta"><span class="tag bbg">BLOOMBERG</span>
-            <span class="k">41 分钟前</span><span class="arrow">↗</span></div>
-          <div class="head">德国国债期货创三个月最大单日跌幅，财政扩张预期升温</div>
-          <div class="brief">2027 年新增借款规模上修至 980 亿欧元　／　十年期 Bund 收益率升至 2.61%</div>
-        </div>
-        <div class="sep"></div>
+    <div class="item">
+      <div class="meta"><span class="tag bbg">BLOOMBERG</span><span class="k">41 分钟前</span></div>
+      <div class="head">德国国债期货创三个月最大单日跌幅，财政扩张预期升温</div>
+      <div class="suben">Bunds Post Biggest One-Day Drop in Three Months</div>
+    </div><div class="sep"></div>
 
-        <div class="item">
-          <div class="meta"><span class="tag rtr">REUTERS</span>
-            <span class="k">1 小时前</span><span class="arrow">↗</span></div>
-          <div class="head">OPEC+ 维持减产框架不变，布伦特原油重回 78 美元</div>
-          <div class="brief">会议声明未提及明年一季度产量安排　／　伊拉克补偿性减产承诺延后一个月</div>
+    <div class="item">
+      <div class="meta"><span class="tag rtr">REUTERS</span><span class="k">1 小时前</span></div>
+      <div class="head">OPEC+ 维持减产框架不变，布伦特原油重回 78 美元</div>
+      <div class="suben">OPEC+ Holds Output Cuts, Brent Back at $78</div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ===== 2. 阅读 ===== -->
+<div class="stage">
+  <div class="cap">Reader · 全文本地解析</div>
+  <div class="phone"><div class="notch"></div><div class="screen"><div class="art">
+    <div class="kicker">
+      <span class="tag bbg">BLOOMBERG</span>
+      <span class="k">24 段 · App 内直取</span>
+      <span class="k orange" style="margin-left:auto">已译</span>
+    </div>
+    <h1>美联储官员暗示 12 月降息门槛抬升，美元指数站上 105</h1>
+    <div class="arten">Fed Officials Signal Higher Bar for December Rate Cut</div>
+
+    <div class="body">
+      <p>美联储多位官员周二在不同场合释放相近信号：在核心通胀明确回落至目标附近之前，12 月下调利率的门槛正在抬高。这一表态令市场对年内第二次降息的押注明显降温。</p>
+      <h2>掉期市场重新定价</h2>
+      <p>与美联储会期挂钩的隔夜指数掉期显示，交易员对 12 月降息 25 个基点的概率定价已从一周前的 62% 降至 38%。两年期美债收益率随之上行 6 个基点至 3.94%。</p>
+      <div class="quote"><div class="bar"></div>
+        <p>“我们需要看到的不只是一次好数据，而是连续三个月的方向性证据。”——一位今年拥有投票权的地区联储主席</p>
+      </div>
+      <div class="via">提取路径 · next_data　｜　墙残留 · 0</div>
+    </div>
+
+    <div class="bottom">
+      <div class="pill">▶</div>
+      <div class="pill" style="color:var(--orange)">译成中文</div>
+      <div class="seg"><span class="on">译文</span><span>原文</span></div>
+    </div>
+  </div></div></div>
+</div>
+
+<!-- ===== 3. 设置 + 诊断 ===== -->
+<div class="stage">
+  <div class="cap">Settings · 诊断</div>
+  <div class="phone"><div class="notch"></div><div class="screen"><div class="set">
+    <div class="grp">
+      <div class="t">信源</div>
+      <div class="card">
+        <div class="r"><div>彭博 Bloomberg<br><span class="v">拦 fence 客户端 + 清计量</span></div><div class="sw"></div></div>
+        <div class="r"><div>路透 Reuters<br><span class="v">拦 arc/subs + 清遮罩</span></div><div class="sw"></div></div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="t">抓取</div>
+      <div class="card">
+        <div class="r"><div>自动预热正文</div><div class="sw"></div></div>
+        <div class="r"><div>立即抓一轮</div><div class="v o">触发</div></div>
+        <div class="r"><div>最近状态</div><div class="v">发现 41 / 新增 6</div></div>
+        <div class="r"><div>待取正文</div><div class="v">6 条</div></div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="t">诊断（真机排障用）</div>
+      <div class="card">
+        <div class="r"><div>复制诊断报告</div><div class="v o">已复制</div></div>
+        <div class="r"><div>清空诊断记录</div><div class="v">—</div></div>
+        <div class="r" style="display:block">
+          <div class="v">bloomberg · 成功 · next_data · 24 段 · 2380ms</div>
+          <div class="warn" style="margin-top:4px">残留遮罩：articleBlur_B5x2 / _sheetWrapper_1q</div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ============ 文章页 ============ -->
-  <div class="stage">
-    <h4>Article · 中英对照</h4>
-    <div class="phone">
-      <div class="notch"></div>
-      <div class="screen art">
-        <div class="kicker">
-          <span class="tag bbg">BLOOMBERG</span>
-          <span class="k">12 分钟前　·　约 3 分钟　·　24 段</span>
-        </div>
-
-        <h1>美联储官员暗示 12 月降息门槛抬升，美元指数站上 105</h1>
-
-        <div class="takeaways">
-          <div class="k orange">要点</div>
-          <div class="row"><div class="bar"></div><p>三位票委强调核心通胀仍处 2.6%，需要更多数据佐证</p></div>
-          <div class="row"><div class="bar"></div><p>隔夜指数掉期隐含 12 月降息概率降至 38%</p></div>
-          <div class="row"><div class="bar"></div><p>美元指数突破 105，两年期美债收益率上行 6 个基点</p></div>
-        </div>
-
-        <div class="body">
-          <p>美联储多位官员周二在不同场合释放相近信号：在核心通胀明确回落至目标附近之前，12 月下调利率的门槛正在抬高。这一表态令市场对年内第二次降息的押注明显降温。</p>
-
-          <h2>掉期市场重新定价</h2>
-          <p>与美联储会期挂钩的隔夜指数掉期显示，交易员对 12 月降息 25 个基点的概率定价已从一周前的 62% 降至 38%。两年期美债收益率随之上行 6 个基点至 3.94%。</p>
-
-          <div class="quote"><div class="bar"></div>
-            <p>“我们需要看到的不只是一次好数据，而是连续三个月的方向性证据。”——一位今年拥有投票权的地区联储主席</p>
-          </div>
-
-          <p>美元指数在欧洲交易时段站上 105 关口，为近两个月首次。非美货币普遍承压，日元一度贬至 152.3，欧元跌破 1.08。</p>
-        </div>
-
-        <div class="src">
-          <div class="k">Source · Bloomberg</div>
-          <a href="#">查看原文 ↗</a>
-        </div>
-
-        <div class="bottom">
-          <div class="play">▶</div>
-          <div class="seg"><span class="on">译文</span><span>原文</span></div>
-        </div>
+    <div class="grp">
+      <div class="t">关于</div>
+      <div class="card">
+        <div class="r"><div>版本</div><div class="v">1.0.0</div></div>
+        <div class="r"><div>拦截规则</div><div class="v">2 / 2 站点</div></div>
+        <div class="r"><div>运行方式</div><div class="v">App 内置 · 无服务器</div></div>
       </div>
     </div>
-  </div>
-
-  <!-- ============ 色板 ============ -->
-  <div class="palette">
-    <h3>Design tokens</h3>
-    <div class="sw"><div class="chip" style="background:#000"></div>#000000　背景（纯黑）</div>
-    <div class="sw"><div class="chip" style="background:#0C0C0D"></div>#0C0C0D　表单/卡片面</div>
-    <div class="sw"><div class="chip" style="background:#161617"></div>#161617　控件底</div>
-    <div class="sw"><div class="chip" style="background:#252527"></div>#252527　发丝线 0.5pt</div>
-    <div class="sw"><div class="chip" style="background:#F5F5F4"></div>#F5F5F4　正文白</div>
-    <div class="sw"><div class="chip" style="background:#8B8B8F"></div>#8B8B8F　次级灰</div>
-    <div class="sw"><div class="chip" style="background:#FF6B00"></div>#FF6B00　信号橙（每屏最多 2 处）</div>
-
-    <div class="note">
-      <b>排版</b>：标题用衬线（New York / 宋体），正文用系统无衬线 16pt / 行高 1.85；<br>
-      <b>Kicker</b>：10px、字距 1.8、全大写，承担“栏目/时间/来源”这类元信息；<br>
-      <b>分隔</b>：只用 0.5pt 发丝线，不用卡片阴影与圆角大块；<br>
-      <b>信源</b>：彭博＝白底黑字（庄重），路透＝橙底黑字（醒目）；<br>
-      <b>克制</b>：一屏最多两处橙色，其余全部单色 —— Bloomberg 的贵气来自留白与字重。
-    </div>
-  </div>
+  </div></div></div>
+</div>
 
 </body>
 </html>

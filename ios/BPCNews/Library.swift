@@ -20,7 +20,7 @@ struct FeedItem: Codable, Identifiable, Equatable {
     let id: String            // = url 的 hash
     let site: Site
     let title: String
-    let url: String
+    var url: String           // Google 跳转解析后会被就地改写为真实文章地址
     let ts: Int               // unix 秒
     var titleZh: String = ""
     var brief: [String] = []
@@ -131,6 +131,13 @@ final class Library {
 
     func item(for id: String) -> FeedItem? {
         items.first { $0.id == id }
+    }
+
+    /// Google News 跳转解析成功后，把条目 URL 就地换成真实地址
+    func updateURL(_ id: String, to url: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }), items[i].url != url else { return }
+        items[i].url = url
+        persistFeed()
     }
 
     func removeAll() {

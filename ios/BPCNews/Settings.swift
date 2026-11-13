@@ -25,7 +25,11 @@ enum Settings {
             : UserDefaults.standard.bool(forKey: "auto_fetch")
     }
 
-    // 翻译（可选：填了 key 才有「译」按钮）
+    // 翻译（三种模式：dict 离线词典 / llm 大模型 / off 关闭）
+    static var zhMode: String {
+        let v = UserDefaults.standard.string(forKey: "zh_mode") ?? ""
+        return v.isEmpty ? "dict" : v       // 默认：离线词典，直接显示中文
+    }
     static var llmKey: String { UserDefaults.standard.string(forKey: "llm_key") ?? "" }
     static var llmModel: String {
         let v = UserDefaults.standard.string(forKey: "llm_model") ?? ""

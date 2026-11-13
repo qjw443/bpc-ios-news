@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("src_reuters") private var srcReuters: Bool = true
     @AppStorage("auto_fetch") private var autoFetch: Bool = true
     @AppStorage("translate_on_open") private var translateOnOpen: Bool = false
+    @AppStorage("zh_mode") private var zhMode: String = "dict"
     @AppStorage("llm_url") private var llmURL: String = "https://api.deepseek.com/chat/completions"
     @AppStorage("llm_model") private var llmModel: String = "deepseek-chat"
     @AppStorage("llm_key") private var llmKey: String = ""
@@ -102,6 +103,13 @@ struct SettingsView: View {
 
     private var translateSection: some View {
         Section {
+            Picker(selection: $zhMode) {
+                Text("离线词典 · 默认中文").tag("dict")
+                Text("大模型整句翻译").tag("llm")
+                Text("只看原文").tag("off")
+            } label: {
+                Text("中文模式").foregroundColor(Theme.ink)
+            }
             TextField("https://api.deepseek.com/chat/completions", text: $llmURL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
@@ -111,15 +119,15 @@ struct SettingsView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .foregroundColor(Theme.ink)
-            SecureField("LLM API Key（留空则不显示翻译）", text: $llmKey)
+            SecureField("LLM API Key（仅大模型模式需要）", text: $llmKey)
                 .foregroundColor(Theme.ink)
             Toggle(isOn: $translateOnOpen) {
                 Text("打开文章即翻译").foregroundColor(Theme.ink)
             }.tint(Theme.orange)
         } header: {
-            Kicker(text: "翻译（可选）").padding(.bottom, 2)
+            Kicker(text: "中文").padding(.bottom, 2)
         } footer: {
-            Text("填 Key 后阅读页底部出现「译成中文」，段落 1:1 对齐；不填也能读原文。")
+            Text("「离线词典」= 术语级替换（约 \(Dict.entryCount) 条财经词汇），纯本地、不联网、不需要 Key，打开即中文。想要整句通顺再切「大模型」。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)
@@ -199,6 +207,9 @@ struct SettingsView: View {
             }
             LabeledContent("拦截规则") {
                 Text("\(rulesCount) / 2 站点").font(.mono(11)).foregroundColor(Theme.inkDim)
+            }
+            LabeledContent("离线词条") {
+                Text("\(Dict.entryCount)").font(.mono(11)).foregroundColor(Theme.inkDim)
             }
             LabeledContent("运行方式") {
                 Text("App 内置 · 无服务器").font(.system(size: 11)).foregroundColor(Theme.inkDim)

@@ -10,6 +10,7 @@
 		A1FB98207B17985A6B247982 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258C144E046E3C88B2ACEA59 /* AppDelegate.swift */; };
 		286A0AC12C0F9BA3319F81F6 /* BPCNewsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBF49ACD501ABE2995EA985 /* BPCNewsApp.swift */; };
 		21F34D5102F0C1F588ED36A2 /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE594E7541A7B54F6D723231 /* Diagnostics.swift */; };
+		ABED7B13F8CD7D893267295A /* Dict.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C863765E620167F883517E /* Dict.swift */; };
 		F874A72DA8D930AD83D6CF52 /* Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB8AE397017FB0ECF0512FBF /* Discovery.swift */; };
 		BFD46DC045DC69BF211A2339 /* FeedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE219516B37953FBE8D42064 /* FeedStore.swift */; };
 		A5CB77563DF438127BEE4602 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50318164A9B836DA2040E3C4 /* FeedView.swift */; };
@@ -28,6 +29,7 @@
 		258C144E046E3C88B2ACEA59 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		5FBF49ACD501ABE2995EA985 /* BPCNewsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BPCNewsApp.swift; sourceTree = "<group>"; };
 		FE594E7541A7B54F6D723231 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
+		C9C863765E620167F883517E /* Dict.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dict.swift; sourceTree = "<group>"; };
 		EB8AE397017FB0ECF0512FBF /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Discovery.swift; sourceTree = "<group>"; };
 		AE219516B37953FBE8D42064 /* FeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStore.swift; sourceTree = "<group>"; };
 		50318164A9B836DA2040E3C4 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
@@ -70,6 +72,7 @@
 				258C144E046E3C88B2ACEA59 /* AppDelegate.swift */,
 				5FBF49ACD501ABE2995EA985 /* BPCNewsApp.swift */,
 				FE594E7541A7B54F6D723231 /* Diagnostics.swift */,
+				C9C863765E620167F883517E /* Dict.swift */,
 				EB8AE397017FB0ECF0512FBF /* Discovery.swift */,
 				AE219516B37953FBE8D42064 /* FeedStore.swift */,
 				50318164A9B836DA2040E3C4 /* FeedView.swift */,
@@ -167,6 +170,7 @@
 				A1FB98207B17985A6B247982 /* AppDelegate.swift in Sources */,
 				286A0AC12C0F9BA3319F81F6 /* BPCNewsApp.swift in Sources */,
 				21F34D5102F0C1F588ED36A2 /* Diagnostics.swift in Sources */,
+				ABED7B13F8CD7D893267295A /* Dict.swift in Sources */,
 				F874A72DA8D930AD83D6CF52 /* Discovery.swift in Sources */,
 				BFD46DC045DC69BF211A2339 /* FeedStore.swift in Sources */,
 				A5CB77563DF438127BEE4602 /* FeedView.swift in Sources */,

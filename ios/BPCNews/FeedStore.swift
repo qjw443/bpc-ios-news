@@ -17,6 +17,16 @@ final class FeedStore: ObservableObject {
     private var busy = false
     private let lastCheckKey = "last_discovery_ts"
 
+    /// 用来解析 Google News 跳转链接
+    private lazy var session: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 20
+        c.waitsForConnectivity = true
+        c.httpAdditionalHeaders = ["User-Agent": Rules.chromeUA,
+                                   "Accept-Language": "en-US,en;q=0.9"]
+        return URLSession(configuration: c)
+    }()
+
     // MARK: - 启动
 
     func bootstrap() {
@@ -42,11 +52,16 @@ final class FeedStore: ObservableObject {
             for f in found where enabled.contains(f.site.rawValue) {
                 let title = Self.cleanTitle(f.title)
                 let id = Hash.short(f.link + "|" + title)
-                mapped.append(FeedItem(id: id,
-                                       site: f.site,
-                                       title: title,
-                                       url: f.link,
-                                       ts: Int((f.date ?? Date()).timeIntervalSince1970)))
+                var item = FeedItem(id: id,
+                                    site: f.site,
+                                    title: title,
+                                    url: f.link,
+                                    ts: Int((f.date ?? Date()).timeIntervalSince1970))
+                // 词典模式：列表标题当场中文化，不用等正文
+                if Settings.zhMode == "dict" {
+                    item.titleZh = Dict.translate(title)
+                }
+                mapped.append(item)
             }
             let fresh = Library.shared.merge(mapped)
             DispatchQueue.main.async {
@@ -76,8 +91,35 @@ final class FeedStore: ObservableObject {
             return
         }
         guard fetchers[item.id] == nil else { completion?(nil); return }
-        guard let url = URL(string: item.url) else { completion?(nil); return }
 
+        // 关键：Google News 的 /rss/articles/... 是跳转页，必须先解析成真实文章地址，
+        // 否则 WebView 打开的是 Google 中间页，永远提不到正文。
+        if item.url.contains("news.google.com") {
+            status = "解析原文链接…"
+            Discovery.resolve(item.url, session: session) { [weak self] resolved in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    guard resolved != item.url, resolved.hasPrefix("http") else {
+                        self.lastError = "Google 跳转未解析出原文地址（可能是网络被拦）"
+                        self.status = "取稿失败"
+                        completion?(nil)
+                        return
+                    }
+                    Library.shared.updateURL(item.id, to: resolved)
+                    self.items = Library.shared.items
+                    var it = item
+                    it.url = resolved
+                    self.startFetch(item: it, silent: silent, completion: completion)
+                }
+            }
+            return
+        }
+        startFetch(item: item, silent: silent, completion: completion)
+    }
+
+    private func startFetch(item: FeedItem, silent: Bool,
+                            completion: ((Article?) -> Void)?) {
+        guard let url = URL(string: item.url) else { completion?(nil); return }
         let fetcher = ArticleFetcher()
         fetchers[item.id] = fetcher
 
@@ -90,7 +132,7 @@ final class FeedStore: ObservableObject {
                 self.fetchers.removeValue(forKey: item.id)
                 DispatchQueue.main.async {
                     self.items = Library.shared.items
-                    if !silent { self.status = "已取稿：\(a.blocks.count) 段" }
+                    if !silent { self.status = "已取稿：\(a.blocks.count) 段 · \(a.via)" }
                 }
                 completion?(a)
             }, onFail: { [weak self] err in

@@ -12,6 +12,9 @@ struct ReaderView: View {
     @State private var errorText = ""
     @State private var translating = false
     @State private var player: AVPlayer?
+    @State private var elapsed = 0
+
+    private let secTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var item: FeedItem? { Library.shared.item(for: itemId) }
 
@@ -66,6 +69,9 @@ struct ReaderView: View {
             }
         }
         .task { load() }
+        .onReceive(secTicker) { _ in
+            if loading { elapsed += 1 }
+        }
     }
 
     // MARK: 头
@@ -228,7 +234,7 @@ struct ReaderView: View {
                     .buttonStyle(.plain)
                 }
                 Spacer()
-                if !Settings.llmKey.isEmpty {
+                if Settings.zhMode == "llm" && !Settings.llmKey.isEmpty {
                     Button {
                         translate()
                     } label: {
@@ -279,9 +285,21 @@ struct ReaderView: View {
             Text("已拦截付费墙脚本 · 正在提取正文")
                 .font(.system(size: 12))
                 .foregroundColor(Theme.inkDim)
+            Text("\(elapsed) 秒")
+                .font(.mono(11))
+                .foregroundColor(Theme.hairline)
+            HStack(spacing: 10) {
+                Button("用网页模式看") { showWeb = true }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.orange)
+                Button("取消") { loading = false; elapsed = 0; errorText = "已取消" }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.inkDim)
+            }
+            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 140)
+        .padding(.top, 130)
     }
 
     private var failView: some View {
@@ -310,9 +328,9 @@ struct ReaderView: View {
     // MARK: 动作
 
     private func load() {
+        elapsed = 0
         if let cached = Library.shared.article(for: itemId), cached.blocks.count >= 3 {
-            article = cached
-            if Settings.translateOnOpen { translate() }
+            article = withChinese(cached)
             return
         }
         guard let it = item else {
@@ -323,13 +341,26 @@ struct ReaderView: View {
         errorText = ""
         store.fetch(item: it) { art in
             loading = false
+            elapsed = 0
             if let art = art {
-                article = art
-                if Settings.translateOnOpen { translate() }
+                article = withChinese(art)
             } else {
                 errorText = store.lastError.isEmpty ? "正文抓取失败，可试网页模式" : store.lastError
             }
         }
+    }
+
+    /// 按「中文模式」决定是否立刻本地化（词典模式是纯本地、零延迟）
+    private func withChinese(_ a: Article) -> Article {
+        if Settings.zhMode == "dict" && a.blocks.contains(where: { $0.zh.isEmpty }) {
+            let zh = Translator.dictionary(a)
+            Library.shared.markFetched(itemId, article: zh)
+            return zh
+        }
+        if Settings.zhMode == "llm" && Settings.translateOnOpen {
+            DispatchQueue.main.async { self.translate() }
+        }
+        return a
     }
 
     private func translate() {
