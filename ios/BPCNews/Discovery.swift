@@ -78,7 +78,7 @@ final class Discovery: NSObject {
 
         group.notify(queue: .main) {
             var needWeb: [Site] = []
-            let canScrape = full || Date().timeIntervalSince(self.lastWebScrape) > 90
+            let canScrape = full || Date().timeIntervalSince(self.lastWebScrape) > 60
             if canScrape {
                 for site in Site.allCases where (perSite[site.rawValue] ?? 0) < 5 {
                     needWeb.append(site)
@@ -441,6 +441,7 @@ final class WebScraper: NSObject, WKNavigationDelegate {
     private var onDone: (([Discovery.Found]) -> Void)?
     private var site: Site = .reuters
     private var finished = false
+    private var tries = 0
 
     func scrape(urlString: String, site: Site,
                 done: @escaping ([Discovery.Found]) -> Void) {
@@ -463,7 +464,8 @@ final class WebScraper: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+        // 路透边缘挑战是 JS 放行的，1.2 秒太早；等 3.5 秒再抽链接
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in
             self?.extract()
         }
     }
@@ -501,6 +503,12 @@ final class WebScraper: NSObject, WKNavigationDelegate {
                     if !Sources.isArticleURL(u, site: self.site) { continue }
                     found.append(Discovery.Found(site: self.site, title: t, link: u, date: Date()))
                 }
+            }
+            // 抽不到链接且次数未用尽：挑战可能刚放行，重载再抽一次
+            if found.isEmpty && self.tries < 1 {
+                self.tries += 1
+                self.webView?.reload()
+                return
             }
             self.finishWith(found)
         }

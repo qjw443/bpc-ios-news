@@ -38,6 +38,7 @@ struct FeedView: View {
     @State private var titleNonce = 0
     @State private var activeNonce = -1
     @State private var titleTried: Set<String> = []
+    @State private var batchTimeout: DispatchWorkItem?
 
     // 可见优先翻译
     @State private var visibleIds: Set<String> = []
@@ -79,6 +80,9 @@ struct FeedView: View {
                                         FeedRow(item: item)
                                     }
                                     .buttonStyle(.plain)
+                                    .simultaneousGesture(TapGesture().onEnded {
+                                        if !item.read { store.markRead(item.id) }
+                                    })
                                     .onAppear {
                                         visibleIds.insert(item.id)
                                         translateSoon()
@@ -164,10 +168,11 @@ struct FeedView: View {
             Image(systemName: "arrow.up")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(Theme.ink)
-                .frame(width: 44, height: 44)
+                .frame(width: 48, height: 48)
                 .background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.38), radius: 10, y: 4)
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 0.6))
+                .overlay(Circle().fill(Theme.bg.opacity(0.28)))
+                .shadow(color: .black.opacity(0.45), radius: 12, y: 5)
         }
         .accessibilityLabel("回到顶部")
     }
@@ -555,10 +560,31 @@ struct FeedView: View {
         titleBusy = true
         titleNonce += 1
         activeNonce = titleNonce
+
+        // 超时保护：12 秒没回结果就放弃这一批，立刻用词典兜底并继续下一批
+        batchTimeout?.cancel()
+        let timeout = DispatchWorkItem {
+            guard titleBusy else { return }
+            titleBusy = false
+            let ids = titleIds
+            let texts = titleTexts
+            titleIds = []; titleTexts = []; titleResults = []
+            for (i, id) in ids.enumerated() where i < texts.count {
+                let zh = Dict.translate(texts[i])
+                if !zh.isEmpty, zh != texts[i] { Library.shared.setTitleZh(id, zh) }
+            }
+            store.items = Library.shared.items
+            sendPendingIfAny()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { translateTitles() }
+        }
+        batchTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: timeout)
     }
 
     private func applyTitles(_ zh: [String]) {
         guard activeNonce == titleNonce else { return }
+        batchTimeout?.cancel()
+        batchTimeout = nil
         guard !titleIds.isEmpty, zh.count == titleIds.count else { return }
         for (i, id) in titleIds.enumerated() where i < zh.count {
             let t = zh[i].trimmed
@@ -567,14 +593,25 @@ struct FeedView: View {
             if srcLen > 24 && t.count < 6 { continue }
             Library.shared.setTitleZh(id, t)
         }
+        // 本批没收到的，词典补上（列表里不留整行英文）
+        for (i, id) in titleIds.enumerated() where i < titleTexts.count {
+            if let it = Library.shared.item(for: id), it.titleZh.isEmpty {
+                let zh = Dict.translate(titleTexts[i])
+                if !zh.isEmpty, zh != titleTexts[i] { Library.shared.setTitleZh(id, zh) }
+            }
+        }
         store.items = Library.shared.items
         titleIds = []
         titleTexts = []
         titleResults = []
         titleBusy = false
-        store.notifyPending()
+        sendPendingIfAny()
         // 连续补翻：立刻排下一批（可见优先），直到没有待译条目
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { translateTitles() }
+    }
+
+    private func sendPendingIfAny() {
+        store.notifyPending()
     }
 
     /// 词典兜底：把仍为英文的标题填上中文（本地、零延迟）

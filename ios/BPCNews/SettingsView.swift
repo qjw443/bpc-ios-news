@@ -60,6 +60,7 @@ struct SettingsView: View {
                 loadNotifStatus()
             }
             .onChange(of: keepAlive) { on in
+                UserDefaults.standard.set(true, forKey: "keep_alive_user_set")   // 用户显式选择后不再强制
                 if on { SilentKeeper.start() } else { SilentKeeper.stop() }
             }
         }

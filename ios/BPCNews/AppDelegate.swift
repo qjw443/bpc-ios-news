@@ -34,6 +34,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                             using: nil) { task in
             self.handleProcessing(task)
         }
+        // 一次性迁移：老版本可能把 keep_alive 写成 false，这里强制开启一次
+        if UserDefaults.standard.object(forKey: "keep_alive_user_set") == nil {
+            UserDefaults.standard.set(true, forKey: "keep_alive")
+        }
         registerNotificationCategory()
         requestNotificationPermission()
         FeedStore.shared.bootstrap()
