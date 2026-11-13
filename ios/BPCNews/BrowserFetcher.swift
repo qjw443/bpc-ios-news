@@ -90,17 +90,24 @@ final class BrowserFetcher: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        deadline?.cancel()
-        if attempt < maxAttempts {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.load() }
-        } else {
-            finish("")
-        }
+        handleFailure()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
                  withError error: Error) {
-        webView(webView, didFail: navigation, withError: error)
+        handleFailure()
+    }
+
+    /// 注意：不能在这里写 `webView(webView, didFail:…)`——形参名会遮蔽方法名
+    private func handleFailure() {
+        deadline?.cancel()
+        if attempt < maxAttempts {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.load()
+            }
+        } else {
+            finish("")
+        }
     }
 
     private func finish(_ text: String) {
