@@ -44,6 +44,7 @@ struct Article: Codable, Identifiable, Equatable {
     var brief: [String] = []
     var audio: String?
     var blocks: [Block] = []
+    var publishedTs: Int? = nil   // 发布时间（unix 秒，UTC）；阅读页换算成北京时间显示
     var fetchedAt: Int = 0
     var fromArchive: Bool = false
     var via: String = ""       // 命中的提取策略（next_data / dom_artbodytext / testid_paragraph / archive …）
