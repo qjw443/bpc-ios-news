@@ -45,6 +45,8 @@ struct Article: Codable, Identifiable, Equatable {
     var blocks: [Block] = []
     var fetchedAt: Int = 0
     var fromArchive: Bool = false
+    var via: String = ""       // 命中的提取策略（next_data / dom_artbodytext / testid_paragraph / archive …）
+    var walls: [String] = []   // 提取时仍检测到的付费墙节点（诊断用）
 }
 
 // MARK: - 本地库（纯 JSON 落盘，不依赖任何服务端）

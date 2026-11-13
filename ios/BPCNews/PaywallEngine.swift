@@ -121,6 +121,8 @@ struct RawExtract: Decodable {
     let blocks: [RawBlock]?
     let summary: [String]?
     let audio: String?
+    let via: String?
+    let walls: [String]?
 }
 
 /// 离屏 WKWebView 抓取器：加载文章 → 等渲染 → 执行提取 JS → 得到 blocks
@@ -148,6 +150,7 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
     private var startedAt = Date()
     private var archiveTried = false
     private var botMode = false
+    private var lastFinalURL = ""
 
     private var hardTimeout: DispatchWorkItem?
 
@@ -181,6 +184,7 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
     // MARK: WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        lastFinalURL = webView.url?.absoluteString ?? articleURL.absoluteString
         // 给付费墙脚本一点时间跑，再清理并取文
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
             self?.extract()
@@ -235,11 +239,21 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
             art.audio = raw?.audio
             art.fetchedAt = Int(Date().timeIntervalSince1970)
             art.fromArchive = self.archiveTried
+            art.via = (raw?.via?.isEmpty == false) ? raw!.via!
+                       : (self.archiveTried ? "archive" : "unknown")
+            art.walls = raw?.walls ?? []
 
             // 没标题就用正文首段兜底
             if art.title.isEmpty, let first = blocks.first(where: { $0.type == "p" }) {
                 art.title = String(first.text.prefix(80))
             }
+            Diagnostics.shared.record(site: self.site.rawValue,
+                                      url: self.articleURL.absoluteString,
+                                      finalURL: self.lastFinalURL.isEmpty
+                                          ? self.articleURL.absoluteString : self.lastFinalURL,
+                                      via: art.via, blocks: blocks.count, walls: art.walls,
+                                      ms: Int(Date().timeIntervalSince(self.startedAt) * 1000),
+                                      ok: true)
             self.finish(.success(art))
         }
     }
@@ -270,8 +284,17 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
         webView?.navigationDelegate = nil
         webView = nil
         switch result {
-        case .success(let a): ok?(a)
-        case .failure(let e): bad?(e)
+        case .success(let a):
+            ok?(a)
+        case .failure(let e):
+            Diagnostics.shared.record(site: site.rawValue,
+                                      url: articleURL.absoluteString,
+                                      finalURL: lastFinalURL.isEmpty
+                                          ? articleURL.absoluteString : lastFinalURL,
+                                      via: archiveTried ? "archive" : "none", blocks: 0,
+                                      walls: [], ms: Int(Date().timeIntervalSince(startedAt) * 1000),
+                                      ok: false, note: e.localizedDescription)
+            bad?(e)
         }
     }
 }

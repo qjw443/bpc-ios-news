@@ -196,6 +196,14 @@ struct ReaderView: View {
                 .font(.system(size: 10))
                 .foregroundColor(Theme.inkDim)
                 .padding(.top, 2)
+            if !a.via.isEmpty {
+                Kicker(text: "提取路径 · \(a.via)", size: 8).padding(.top, 2)
+            }
+            if !a.walls.isEmpty {
+                Text("检测到残留遮罩：\(a.walls.joined(separator: " / "))")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(red: 1, green: 0.55, blue: 0.2))
+            }
         }
     }
 

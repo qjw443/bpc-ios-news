@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -24,6 +25,7 @@ struct SettingsView: View {
                     sourceSection
                     fetchSection
                     translateSection
+                    diagSection
                     dataSection
                     aboutSection
                 }
@@ -118,6 +120,40 @@ struct SettingsView: View {
             Kicker(text: "翻译（可选）").padding(.bottom, 2)
         } footer: {
             Text("填 Key 后阅读页底部出现「译成中文」，段落 1:1 对齐；不填也能读原文。")
+                .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+        }
+        .listRowBackground(Theme.surface)
+    }
+
+    private var diagSection: some View {
+        Section {
+            Button {
+                UIPasteboard.general.string = Diagnostics.shared.report
+                message = "诊断报告已复制，直接贴给我"
+            } label: {
+                Text("复制诊断报告").foregroundColor(Theme.orange)
+            }
+            Button {
+                Diagnostics.shared.clear()
+                message = "诊断记录已清空"
+            } label: {
+                Text("清空诊断记录").foregroundColor(Theme.inkDim)
+            }
+            if let last = Diagnostics.shared.entries.first {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(last.site) · \(last.ok ? "成功" : "失败") · \(last.via) · \(last.blocks) 段 · \(last.ms)ms")
+                        .font(.mono(10)).foregroundColor(Theme.inkDim)
+                    if !last.walls.isEmpty {
+                        Text("残留遮罩：" + last.walls.joined(separator: " / "))
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(red: 1, green: 0.55, blue: 0.2))
+                    }
+                }
+            }
+        } header: {
+            Kicker(text: "诊断（真机排障用）").padding(.bottom, 2)
+        } footer: {
+            Text("每次抓取都会记录命中的提取策略、段数、耗时与残留遮罩。哪篇没绕过去，复制报告发我即可精准定位。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)
