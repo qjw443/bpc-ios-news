@@ -81,6 +81,14 @@ struct ReaderView: View {
                             copied = true
                         } label: { Label(copied ? "已复制全文" : "复制全文", systemImage: "doc.on.doc") }
                     }
+                    if let it = Library.shared.item(for: itemId) {
+                        Button {
+                            Library.shared.toggleSaved(itemId)
+                            hapticTick()
+                        } label: {
+                            Label(it.saved ? "取消收藏" : "收藏", systemImage: it.saved ? "bookmark.slash" : "bookmark")
+                        }
+                    }
                     Button { showWeb = true } label: {
                         Label("原始网页（含拦截规则）", systemImage: "safari")
                     }
@@ -135,6 +143,10 @@ struct ReaderView: View {
 
     // MARK: 头
 
+    private func hapticTick() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
     /// 发布时间统一显示为北京时间（源站是 UTC/GMT，直接显示会差 8 小时）
     static func timeText(_ a: Article) -> String {
         var ts = a.publishedTs ?? 0
@@ -146,11 +158,15 @@ struct ReaderView: View {
     private func header(_ a: Article) -> some View {        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 SourceTag(site: a.site.rawValue)
-                Kicker(text: ReaderView.timeText(a), size: 9)
+                Kicker(text: ReaderView.timeText(a), size: 8.5)
                 Spacer()
                 if !a.titleZh.isEmpty { Kicker(text: "已译", color: Theme.orange, size: 9) }
             }
             .padding(.top, 10)
+
+            if let it = Library.shared.item(for: itemId), !it.author.isEmpty {
+                Kicker(text: it.author.uppercased(), size: 8, color: Theme.hairline)
+            }
 
             Text(a.titleZh.isEmpty ? a.title : a.titleZh)
                 .font(.editorial(27))
