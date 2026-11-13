@@ -14,11 +14,30 @@ struct ReaderView: View {
     @State private var player: AVPlayer?
     @State private var elapsed = 0
 
+    // 系统端上翻译调度
+    @State private var sysTexts: [String] = []
+    @State private var sysResults: [String] = []
+    @State private var sysBusy = false
+    @State private var sysNonce = 0
+
     private let secTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var item: FeedItem? { Library.shared.item(for: itemId) }
 
     var body: some View {
+        SystemTranslateBox(texts: sysTexts,
+                           results: $sysResults,
+                           busy: $sysBusy,
+                           errorText: $errorText,
+                           nonce: sysNonce) {
+            content
+        }
+        .onChange(of: sysResults) { new in
+            applySystem(new)
+        }
+    }
+
+    private var content: some View {
         ZStack {
             Theme.bg.ignoresSafeArea()
             ScrollView {
@@ -352,19 +371,63 @@ struct ReaderView: View {
 
     /// 按「中文模式」决定是否立刻本地化（词典模式是纯本地、零延迟）
     private func withChinese(_ a: Article) -> Article {
-        if Settings.zhMode == "dict" && a.blocks.contains(where: { $0.zh.isEmpty }) {
-            let zh = Translator.dictionary(a)
-            Library.shared.markFetched(itemId, article: zh)
-            return zh
+        // 先用词典铺一层，避免等系统翻译时白屏
+        var quick = a
+        if a.blocks.contains(where: { $0.zh.isEmpty }) {
+            quick = Translator.dictionary(a)
         }
-        if Settings.zhMode == "llm" && Settings.translateOnOpen {
-            DispatchQueue.main.async { self.translate() }
+        switch Settings.zhMode {
+        case "sys":
+            DispatchQueue.main.async { self.triggerSystem(quick) }
+        case "llm":
+            if Settings.translateOnOpen {
+                DispatchQueue.main.async { self.translate() }
+            }
+        case "off":
+            break
+        default:
+            break
         }
-        return a
+        Library.shared.markFetched(itemId, article: quick)
+        return quick
+    }
+
+    /// 收集标题+各段，交给系统端上翻译
+    private func triggerSystem(_ a: Article) {
+        guard Settings.zhMode == "sys" else { return }
+        var texts: [String] = [a.title]
+        for b in a.blocks where b.type != "hr" && b.type != "img" {
+            texts.append(b.text)
+        }
+        guard texts.count > 1 else { return }
+        sysTexts = texts
+        sysResults = []
+        sysBusy = true
+        sysNonce += 1
+    }
+
+    /// 系统翻译结果回填（标题 + 各段，顺序与 triggerSystem 一致）
+    private func applySystem(_ zh: [String]) {
+        guard var a = article, zh.count == sysTexts.count else { return }
+        if let t = zh.first, !t.isEmpty { a.titleZh = t }
+        var pos = 1
+        for i in a.blocks.indices where a.blocks[i].type != "hr" && a.blocks[i].type != "img" {
+            if pos < zh.count {
+                let t = zh[pos]
+                if !t.isEmpty { a.blocks[i].zh = t }
+            }
+            pos += 1
+        }
+        article = a
+        Library.shared.markFetched(itemId, article: a)
     }
 
     private func translate() {
         guard let a = article, !translating else { return }
+        if Settings.zhMode == "sys" {
+            triggerSystem(a)
+            return
+        }
         translating = true
         Translator.translate(a) { result in
             switch result {

@@ -43,7 +43,13 @@ struct SettingsView: View {
                     Button("关闭") { dismiss() }.foregroundColor(Theme.ink)
                 }
             }
-            .onAppear { rulesCount = PaywallEngine.shared.compiledCount }
+            .onAppear {
+                rulesCount = PaywallEngine.shared.compiledCount
+                // 首次进入时把「中文模式」落盘，保证 Picker 与 Settings 判定一致
+                if UserDefaults.standard.string(forKey: "zh_mode") == nil {
+                    zhMode = Settings.zhMode
+                }
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -104,7 +110,8 @@ struct SettingsView: View {
     private var translateSection: some View {
         Section {
             Picker(selection: $zhMode) {
-                Text("离线词典 · 默认中文").tag("dict")
+                Text("系统端上翻译 · 离线").tag("sys")
+                Text("离线词典 · 术语替换").tag("dict")
                 Text("大模型整句翻译").tag("llm")
                 Text("只看原文").tag("off")
             } label: {
@@ -127,7 +134,7 @@ struct SettingsView: View {
         } header: {
             Kicker(text: "中文").padding(.bottom, 2)
         } footer: {
-            Text("「离线词典」= 术语级替换（约 \(Dict.entryCount) 条财经词汇），纯本地、不联网、不需要 Key，打开即中文。想要整句通顺再切「大模型」。")
+            Text("「系统端上翻译」= Apple 内置模型（iOS 17.4+），首次会弹语言包下载，之后完全离线、不需要 Key。低版本自动回落到词典（\(Dict.entryCount) 条术语替换）。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)

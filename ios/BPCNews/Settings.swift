@@ -25,10 +25,13 @@ enum Settings {
             : UserDefaults.standard.bool(forKey: "auto_fetch")
     }
 
-    // 翻译（三种模式：dict 离线词典 / llm 大模型 / off 关闭）
+    // 翻译（四种模式：sys 系统端上 / dict 离线词典 / llm 大模型 / off 关闭）
     static var zhMode: String {
         let v = UserDefaults.standard.string(forKey: "zh_mode") ?? ""
-        return v.isEmpty ? "dict" : v       // 默认：离线词典，直接显示中文
+        if !v.isEmpty { return v }
+        // 默认：能用系统端上翻译就用它（真翻译、离线、无 Key）
+        if #available(iOS 17.4, *) { return "sys" }
+        return "dict"
     }
     static var llmKey: String { UserDefaults.standard.string(forKey: "llm_key") ?? "" }
     static var llmModel: String {
