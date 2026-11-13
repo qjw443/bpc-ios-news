@@ -13,6 +13,8 @@ struct BPCNewsApp: App {
                     .tabItem { Label("新闻", systemImage: "newspaper.fill") }
                 MacroView()
                     .tabItem { Label("宏观", systemImage: "chart.xyaxis.line") }
+                PolyView()
+                    .tabItem { Label("预测", systemImage: "chart.bar.xaxis") }
             }
             .tint(Theme.orange)
             .preferredColorScheme(.dark)
