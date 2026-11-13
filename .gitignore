@@ -12,3 +12,6 @@ ios/Payload/
 __pycache__/
 *.db
 *.pyc
+_log/
+*.log
+
