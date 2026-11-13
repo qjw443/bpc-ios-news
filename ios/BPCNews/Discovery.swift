@@ -48,11 +48,11 @@ final class Discovery: NSObject {
     // MARK: - 入口
 
     /// 拉一轮：先 HTTP，两个站各自不足 5 条时补一次网页抓取
-    func poll(completion: @escaping ([Found]) -> Void) {
+    func poll(completion: @escaping ([Discovery.Found]) -> Void) {
         statuses = []
         let group = DispatchGroup()
         let lock = NSLock()
-        var collected: [Found] = []
+        var collected: [Discovery.Found] = []
         var perSite: [String: Int] = [:]
 
         for site in Site.allCases {
@@ -90,9 +90,9 @@ final class Discovery: NSObject {
         }
     }
 
-    private func dedupe(_ items: [Found]) -> [Found] {
+    private func dedupe(_ items: [Discovery.Found]) -> [Discovery.Found] {
         var seen = Set<String>()
-        var out: [Found] = []
+        var out: [Discovery.Found] = []
         for f in items {
             let key = f.link.split(separator: "?").first.map(String.init) ?? f.link
             if seen.contains(key) { continue }
@@ -105,7 +105,7 @@ final class Discovery: NSObject {
     // MARK: - HTTP 通道
 
     private func fetch(_ ep: Sources.Endpoint, attempt: Int = 0,
-                       completion: @escaping ([Found], String) -> Void) {
+                       completion: @escaping ([Discovery.Found], String) -> Void) {
         guard let url = URL(string: ep.url) else {
             completion([], "URL 非法")
             return
@@ -132,7 +132,7 @@ final class Discovery: NSObject {
 
     // MARK: - XML 解析（RSS / sitemap / sitemapindex 三合一）
 
-    private func parse(_ data: Data, site: Site, kind: Sources.Kind) -> [Found] {
+    private func parse(_ data: Data, site: Site, kind: Sources.Kind) -> [Discovery.Found] {
         let p = FeedParser(site: site)
         let xp = XMLParser(data: data)
         xp.delegate = p
@@ -144,8 +144,8 @@ final class Discovery: NSObject {
 
     private var scrapers: [WebScraper] = []
 
-    private func scrapeWeb(_ sites: [Site], completion: @escaping ([Found]) -> Void) {
-        var results: [Found] = []
+    private func scrapeWeb(_ sites: [Site], completion: @escaping ([Discovery.Found]) -> Void) {
+        var results: [Discovery.Found] = []
         let group = DispatchGroup()
         for site in sites {
             for page in Sources.pages(for: site) {
@@ -170,7 +170,7 @@ final class Discovery: NSObject {
 final class FeedParser: NSObject, XMLParserDelegate {
 
     private let site: Site
-    private(set) var items: [Found] = []
+    private(set) var items: [Discovery.Found] = []
 
     private var stack: [String] = []
     private var buf = ""
@@ -233,7 +233,7 @@ final class FeedParser: NSObject, XMLParserDelegate {
             case "item":
                 inItem = false
                 if rssLink.count > 10, rssTitle.count > 8 {
-                    items.append(Found(site: site, title: Self.decode(rssTitle),
+                    items.append(Discovery.Found(site: site, title: Self.decode(rssTitle),
                                        link: rssLink,
                                        date: Self.parseDate(rssDate)))
                 }
@@ -253,7 +253,7 @@ final class FeedParser: NSObject, XMLParserDelegate {
                 if smLoc.count > 10 {
                     let title = smTitle.isEmpty ? Self.titleFromURL(smLoc) : Self.decode(smTitle)
                     let date = Self.parseISO(smDate.isEmpty ? smLastmod : smDate)
-                    items.append(Found(site: site, title: title, link: smLoc, date: date))
+                    items.append(Discovery.Found(site: site, title: title, link: smLoc, date: date))
                 }
             default: break
             }
@@ -370,7 +370,7 @@ final class WebScraper: NSObject, WKNavigationDelegate {
                 for row in arr {
                     guard let u = row["u"] as? String, let t = row["t"] as? String else { continue }
                     if !Sources.isArticleURL(u, site: self.site) { continue }
-                    found.append(Discovery.Found(site: self.site, title: t, link: u, date: Date()))
+                    found.append(Discovery.Discovery.Found(site: self.site, title: t, link: u, date: Date()))
                 }
             }
             self.finishWith(found)
