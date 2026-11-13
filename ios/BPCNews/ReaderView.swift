@@ -136,6 +136,7 @@ struct ReaderView: View {
             }
         }
         .task { load() }
+    .onChange(of: article?.id) { _ in autoTranslate() }
         .onReceive(secTicker) { _ in
             if loading { elapsed += 1 }
         }
@@ -416,6 +417,53 @@ struct ReaderView: View {
                 article = withChinese(art)
             } else {
                 errorText = store.lastError.isEmpty ? "正文抓取失败，可试网页模式" : store.lastError
+            }
+        }
+    }
+
+    /// 自动持续翻译：标题 → 摘要 → 正文分批（不依赖界面按钮，也不依赖系统翻译会话）
+    private func autoTranslate() {
+        guard Settings.zhMode != "off", let a = article else { return }
+
+        // ① 标题
+        if Library.shared.item(for: itemId)?.titleZh.isEmpty ?? true {
+            TranslateService.shared.translate([a.title]) { zh, _ in
+                guard let t = zh.first, !t.isEmpty, t != a.title else { return }
+                Library.shared.setTitleZh(itemId, t)
+                if var cur = article { cur.titleZh = t; article = cur }
+            }
+        }
+
+        // ② 正文分批（每批 12 段，翻完继续下一批）
+        translateBlocks(from: 0)
+    }
+
+    private func translateBlocks(from start: Int) {
+        guard Settings.zhMode != "off", var a = article else { return }
+        let idxs = a.blocks.indices.filter { i in
+            (a.blocks[i].type == "p" || a.blocks[i].type == "h2" || a.blocks[i].type == "quote")
+                && a.blocks[i].zh.isEmpty
+                && a.blocks[i].text.count > 8
+        }
+        guard start < idxs.count else { return }
+        let slice = Array(idxs[start..<min(start + 12, idxs.count)])
+        let texts = slice.map { a.blocks[$0].text }
+
+        TranslateService.shared.translate(texts) { zh, _ in
+            var applied = 0
+            for (k, i) in slice.enumerated() where k < zh.count {
+                let t = zh[k].trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !t.isEmpty, t != a.blocks[i].text else { continue }
+                a.blocks[i].zh = t
+                applied += 1
+            }
+            if applied > 0 {
+                article = a
+                Library.shared.markFetched(itemId, article: a)
+            }
+            // 继续下一批
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                translateBlocks(from: start + 12)
             }
         }
     }

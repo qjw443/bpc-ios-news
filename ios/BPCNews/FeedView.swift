@@ -35,6 +35,7 @@ struct FeedView: View {
     @State private var titleBusy = false
     @State private var titleTried: Set<String> = []
     @State private var visibleIds: Set<String> = []
+    @State private var retries: [String: Int] = [:]
 
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
     @Environment(\.scenePhase) private var scenePhase
@@ -555,7 +556,13 @@ struct FeedView: View {
         TranslateService.shared.translate(texts) { results, _ in
             for (i, it) in batch.enumerated() where i < results.count {
                 let t = results[i].trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !t.isEmpty, t != it.title else { continue }
+                if t.isEmpty || t == it.title {
+                    // 没译出来：允许下次重试（最多 2 次），超过就不再占用批次
+                    let n = (retries[it.id] ?? 0) + 1
+                    retries[it.id] = n
+                    if n <= 2 { titleTried.remove(it.id) }
+                    continue
+                }
                 Library.shared.setTitleZh(it.id, t)
             }
             store.items = Library.shared.items

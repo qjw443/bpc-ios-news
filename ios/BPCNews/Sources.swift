@@ -90,12 +90,26 @@ enum Sources {
                           .replacingOccurrences(of: "https://reuters.com", with: "")
             let segs = path.split(separator: "/").map(String.init)
             guard segs.count >= 2 else { return false }
-            // 新版：/world/…/  /business/…/   旧版：/article/<section>/<slug>/
             if segs[0] == "article" { return segs.count >= 3 }
-            let sections = ["world", "business", "markets", "technology", "legal",
-                            "sustainability", "breakingviews", "sports", "science",
-                            "health", "commentary", "investigates", "graphics"]
-            return sections.contains(segs[0])
+
+            // 栏目/专题页（如 /markets/european-markets/、/world/ukraine-and-russia-at-war/）
+            // 与文章页的区别：文章 slug 很长，或尾部带日期 / -idUS 编号
+            let last = segs[segs.count - 1]
+            let hasDate = last.range(of: #"\d{4}-\d{2}-\d{2}"#, options: .regularExpression) != nil
+            let hasId = last.contains("-idUS") || last.contains("-idUK")
+            let words = last.split(separator: "-").count
+            let hubSlugs = ["ukraine-and-russia-at-war", "israel-and-hamas-at-war",
+                            "us-midterm-elections", "future-of-health",
+                            "autos-and-transportation", "aerospace-defense",
+                            "healthcare-and-pharmaceuticals", "retail-and-consumer",
+                            "emerging-markets", "european-markets", "global-market-data",
+                            "boards-policy-regulation", "boards-policy-and-regulation",
+                            "markets", "world", "business", "technology", "legal",
+                            "sports", "science", "health", "breakingviews",
+                            "sustainability", "commentary", "investigates"]
+            if hubSlugs.contains(last) { return false }
+            if segs.count <= 2 && !hasDate && !hasId { return false }
+            return hasDate || hasId || words >= 7
         }
     }
 }

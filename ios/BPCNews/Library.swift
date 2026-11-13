@@ -102,6 +102,8 @@ final class Library {
             for b in badTitles where low.contains(b) { return false }
             return true
         }
+        // 再清一轮：把不符合「文章 URL」规则的条目（栏目页/专题页）剔除
+        items = items.filter { Sources.isArticleURL($0.url, site: $0.site) }
         if items.count != before { persistFeed() }
     }
 
