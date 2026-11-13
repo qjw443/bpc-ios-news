@@ -92,7 +92,9 @@ final class PaywallEngine: NSObject {
         return r
     }
 
-    /// 手动清 cookie（设置页按钮用）
+    /// 手动清 cookie（设置页按钮用）。
+    /// 注意：抓取用的上下文都是 .nonPersistent()，每次全新会话，本身不残留；
+    /// 这里清的是默认仓里的历史 cookie（例如以前用 Safari 打开过同样的站）。
     func wipeAllCookies(_ done: @escaping () -> Void) {
         let store = WKWebsiteDataStore.default()
         store.httpCookieStore.getAllCookies { cookies in
@@ -101,15 +103,7 @@ final class PaywallEngine: NSObject {
                 group.enter()
                 store.httpCookieStore.delete(c) { group.leave() }
             }
-            group.notify(queue: .main) {
-                let types = WKWebsiteDataStore.allWebsiteDataTypes()
-                // 新版 SDK 把 dataRecords(ofTypes:) 导入了 async 重载，尾随闭包会被判为多余参数，
-                // 这里显式写 completionHandler: 选择带回调的版本
-                store.dataRecords(ofTypes: types, completionHandler: { records in
-                    store.removeData(ofTypes: types, for: records,
-                                     completionHandler: { done() })
-                })
-            }
+            group.notify(queue: .main) { done() }
         }
     }
 }
