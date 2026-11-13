@@ -17,26 +17,20 @@ final class FeedStore: ObservableObject {
     private var busy = false
     private let lastCheckKey = "last_discovery_ts"
 
-    /// 用来解析 Google News 跳转链接
-    private lazy var session: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.timeoutIntervalForRequest = 20
-        c.waitsForConnectivity = true
-        c.httpAdditionalHeaders = ["User-Agent": Rules.chromeUA,
-                                   "Accept-Language": "en-US,en;q=0.9"]
-        return URLSession(configuration: c)
-    }()
-
     // MARK: - 启动
 
     func bootstrap() {
         Library.shared.load()
+        Library.shared.migrate()          // 清掉旧版 Google 源留下的脏条目
         items = Library.shared.items
         status = "规则编译中…"
         PaywallEngine.shared.prepare { [weak self] in
             self?.status = "规则就绪（\(PaywallEngine.shared.compiledCount) 条）"
         }
     }
+
+    /// 各发现源的最近一次结果（设置页展示）
+    var sourceStatuses: [Discovery.SourceStatus] { discovery.statuses }
 
     // MARK: - 发现最新
 
@@ -69,11 +63,13 @@ final class FeedStore: ObservableObject {
                 mapped.append(item)
             }
             let fresh = Library.shared.merge(mapped)
+            let bbg = mapped.filter { $0.site == .bloomberg }.count
+            let rtr = mapped.count - bbg
             DispatchQueue.main.async {
                 self.items = Library.shared.items
                 self.loading = false
                 self.busy = false
-                self.status = "发现 \(mapped.count) 条 / 新增 \(fresh.count) 条"
+                self.status = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
                 UserDefaults.standard.set(Int(Date().timeIntervalSince1970), forKey: self.lastCheckKey)
             }
             if notify && !fresh.isEmpty { self.notifyNew(fresh) }
@@ -91,30 +87,6 @@ final class FeedStore: ObservableObject {
             return
         }
         guard fetchers[item.id] == nil else { completion?(nil); return }
-
-        // 关键：Google News 的 /rss/articles/... 是跳转页，必须先解析成真实文章地址，
-        // 否则 WebView 打开的是 Google 中间页，永远提不到正文。
-        if item.url.contains("news.google.com") {
-            status = "解析原文链接…"
-            Discovery.resolve(item.url, session: session) { [weak self] resolved in
-                DispatchQueue.main.async {
-                    guard let self = self else { return }
-                    // 解析不出来也没关系：Google 那个页面靠 JS 跳转，
-                    // 交给 WKWebView 执行（PaywallEngine 里会监视跳转）。
-                    if resolved != item.url, resolved.hasPrefix("http") {
-                        Library.shared.updateURL(item.id, to: resolved)
-                        self.items = Library.shared.items
-                        var it = item
-                        it.url = resolved
-                        self.startFetch(item: it, silent: silent, completion: completion)
-                    } else {
-                        self.status = "经 Google 跳转打开…"
-                        self.startFetch(item: item, silent: silent, completion: completion)
-                    }
-                }
-            }
-            return
-        }
         startFetch(item: item, silent: silent, completion: completion)
     }
 

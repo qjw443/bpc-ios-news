@@ -24,6 +24,7 @@ struct SettingsView: View {
                 Theme.bg.ignoresSafeArea()
                 Form {
                     sourceSection
+                    sourceStatusSection
                     fetchSection
                     translateSection
                     diagSection
@@ -75,6 +76,34 @@ struct SettingsView: View {
             Kicker(text: "信源").padding(.bottom, 2)
         } footer: {
             Text("改动后下拉刷新生效。")
+                .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+        }
+        .listRowBackground(Theme.surface)
+    }
+
+    private var sourceStatusSection: some View {
+        Section {
+            if store.sourceStatuses.isEmpty {
+                Text("还没有抓过。下拉刷新后这里会列出每个源的结果。")
+                    .font(.system(size: 11)).foregroundColor(Theme.inkDim)
+            }
+            ForEach(store.sourceStatuses) { s in
+                HStack(spacing: 8) {
+                    Text(s.name)
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.ink)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(s.ok ? "\(s.count) 条" : s.note)
+                        .font(.mono(10))
+                        .foregroundColor(s.ok ? Theme.inkDim
+                                              : Color(red: 1, green: 0.45, blue: 0.30))
+                }
+            }
+        } header: {
+            Kicker(text: "发现源 · 官方接口").padding(.bottom, 2)
+        } footer: {
+            Text("彭博：sitemap/news/latest.xml + 6 个官方 RSS。路透：官方 news-sitemap；若被边缘反爬挑战（401），自动改用 App 内浏览器打开栏目页抽链接。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)

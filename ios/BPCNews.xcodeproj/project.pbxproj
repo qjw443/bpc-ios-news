@@ -20,6 +20,7 @@
 		1F78A1DA50A4FACEBF2082F7 /* Rules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C31EBFBDC42F3ADE9F345F7 /* Rules.swift */; };
 		62076D008CB56279A1797816 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C202FCEF979B3769680E4D22 /* Settings.swift */; };
 		E64506B02A811191046FF3CF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F4612DED72C00E7C66967D /* SettingsView.swift */; };
+		636DBE2DB6E9E957F8BC7C36 /* Sources.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A3BBE3E38D1D7AFBD54E1A /* Sources.swift */; };
 		3C734766C5DEDD9AF3FC3930 /* SystemTranslate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F04A76FA81AC302C5668625E /* SystemTranslate.swift */; };
 		4AA65FD09FF063B1D7B17073 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 844D05EFE0893E1DC2B71FA6 /* Theme.swift */; };
 		33639508B4078A9E640221B5 /* Translate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 707A5332C7F37533EAD62255 /* Translate.swift */; };
@@ -41,6 +42,7 @@
 		1C31EBFBDC42F3ADE9F345F7 /* Rules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rules.swift; sourceTree = "<group>"; };
 		C202FCEF979B3769680E4D22 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		54F4612DED72C00E7C66967D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		89A3BBE3E38D1D7AFBD54E1A /* Sources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources.swift; sourceTree = "<group>"; };
 		F04A76FA81AC302C5668625E /* SystemTranslate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTranslate.swift; sourceTree = "<group>"; };
 		844D05EFE0893E1DC2B71FA6 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		707A5332C7F37533EAD62255 /* Translate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Translate.swift; sourceTree = "<group>"; };
@@ -86,6 +88,7 @@
 				1C31EBFBDC42F3ADE9F345F7 /* Rules.swift */,
 				C202FCEF979B3769680E4D22 /* Settings.swift */,
 				54F4612DED72C00E7C66967D /* SettingsView.swift */,
+				89A3BBE3E38D1D7AFBD54E1A /* Sources.swift */,
 				F04A76FA81AC302C5668625E /* SystemTranslate.swift */,
 				844D05EFE0893E1DC2B71FA6 /* Theme.swift */,
 				707A5332C7F37533EAD62255 /* Translate.swift */,
@@ -187,6 +190,7 @@
 				1F78A1DA50A4FACEBF2082F7 /* Rules.swift in Sources */,
 				62076D008CB56279A1797816 /* Settings.swift in Sources */,
 				E64506B02A811191046FF3CF /* SettingsView.swift in Sources */,
+				636DBE2DB6E9E957F8BC7C36 /* Sources.swift in Sources */,
 				3C734766C5DEDD9AF3FC3930 /* SystemTranslate.swift in Sources */,
 				4AA65FD09FF063B1D7B17073 /* Theme.swift in Sources */,
 				33639508B4078A9E640221B5 /* Translate.swift in Sources */,

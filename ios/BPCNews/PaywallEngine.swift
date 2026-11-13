@@ -107,27 +107,13 @@ final class PaywallEngine: NSObject {
         }
     }
 
-    /// Google 的「在你继续谷歌之前」同意页会吃掉整个跳转。
-    /// 预置 CONSENT / SOCS 两个 cookie，Google 就会跳过同意页直接跳原文。
-    func seedGoogleConsent(_ webView: WKWebView, done: @escaping () -> Void) {
-        let store = webView.configuration.websiteDataStore
-        let pairs = [("CONSENT", "YES+cb"), ("SOCS", "CAI")]
-        let group = DispatchGroup()
-        for (name, value) in pairs {
-            let props: [HTTPCookiePropertyKey: Any] = [
-                .name: name,
-                .value: value,
-                .domain: ".google.com",
-                .path: "/",
-                .secure: "TRUE",
-                .expires: Date().addingTimeInterval(86400 * 365),
-            ]
-            if let cookie = HTTPCookie(properties: props) {
-                group.enter()
-                store.httpCookieStore.setCookie(cookie) { group.leave() }
-            }
-        }
-        group.notify(queue: .main) { done() }
+    /// 站点首页/栏目页（发现层的网页兜底也要用同一套规则与指纹）
+    func homeRequest(for url: URL) -> URLRequest {
+        var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        r.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        r.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                   forHTTPHeaderField: "Accept")
+        return r
     }
 }
 
@@ -174,7 +160,6 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
     private var archiveTried = false
     private var botMode = false
     private var lastFinalURL = ""
-    private var googleTries = 0
 
     private var hardTimeout: DispatchWorkItem?
 
@@ -188,6 +173,13 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
         self.onFail = onFail
         self.startedAt = Date()
 
+        // 只接受彭博/路透自己的文章地址
+        let host = url.host ?? ""
+        if !(host.contains("bloomberg.com") || host.contains("reuters.com")) {
+            onFail(FetchError.loadFailed("非目标站点地址：\(host)"))
+            return
+        }
+
         PaywallEngine.shared.prepare { [weak self] in
             guard let self = self else { return }
             let ua = botMode ? Rules.googlebotUA : Rules.chromeUA
@@ -199,17 +191,9 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
                 self?.finish(.failure(FetchError.timeout))
             }
             self.hardTimeout = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 40, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: work)
 
-            let req = PaywallEngine.shared.request(for: url, site: site)
-            if (url.host ?? "").contains("google.com") {
-                // 先塞 consent cookie，再加载，避免停在同意页
-                PaywallEngine.shared.seedGoogleConsent(wv) {
-                    wv.load(req)
-                }
-            } else {
-                wv.load(req)
-            }
+            wv.load(PaywallEngine.shared.request(for: url, site: site))
         }
     }
 
@@ -217,17 +201,11 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         lastFinalURL = webView.url?.absoluteString ?? articleURL.absoluteString
-        // Google 同意页：识别出来就直接判失败，别把同意条款当正文
+        // 打开的是同意/条款页（不是文章）→ 直接判失败，避免把条款当正文
         let pageTitle = webView.title ?? ""
         if pageTitle.contains("Before you continue") || pageTitle.contains("在你继续")
-            || lastFinalURL.contains("consent.google.com") {
-            finish(.failure(FetchError.loadFailed("Google 同意页未跳过")))
-            return
-        }
-        // 还停在 Google 跳转页：它是个 JS 应用（600KB），要等它自己跳到发布方。
-        // 不能立刻判死 —— 真机上用户点 Google News 链接就是靠这套 JS 跳转的。
-        if lastFinalURL.contains("news.google.com") {
-            watchGoogleRedirect()
+            || lastFinalURL.contains("consent.") {
+            finish(.failure(FetchError.loadFailed("打开的是同意页，不是文章")))
             return
         }
         // 给付费墙脚本一点时间跑，再清理并取文
@@ -237,39 +215,6 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
     }
 
     /// 轮询等待 Google 页的 JS 跳转；同时尝试从页面里直接挖发布方链接
-    private func watchGoogleRedirect() {
-        guard let wv = webView else { return }
-        let current = wv.url?.absoluteString ?? ""
-        if !current.contains("news.google.com") { return }   // 已跳走，等下一次 didFinish
-
-        googleTries += 1
-        if googleTries > 14 {
-            finish(.failure(FetchError.loadFailed("Google 跳转页未放行（网络受限），可用网页模式重试")))
-            return
-        }
-
-        wv.evaluateJavaScript("""
-        (function(){
-          var as = Array.from(document.querySelectorAll('a[href]'));
-          for (var i = 0; i < as.length; i++) {
-            var h = as[i].href || '';
-            if (h.indexOf('bloomberg.com') >= 0 || h.indexOf('reuters.com') >= 0) return h;
-          }
-          return '';
-        })();
-        """) { [weak self] res, _ in
-            guard let self = self else { return }
-            if let s = res as? String, !s.isEmpty, let u = URL(string: s) {
-                self.lastFinalURL = s
-                self.webView?.load(PaywallEngine.shared.request(for: u, site: self.site))
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                self.watchGoogleRedirect()
-            }
-        }
-    }
-
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         finish(.failure(FetchError.loadFailed(error.localizedDescription)))
     }

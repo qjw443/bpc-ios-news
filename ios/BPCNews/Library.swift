@@ -85,6 +85,19 @@ final class Library {
         articles.removeAll()
     }
 
+    /// 迁移：清掉旧版本（第三方聚合源）留下的条目，以及被误抓成正文的同意页标题
+    func migrate() {
+        let badTitles = ["before you continue", "在你继续谷歌之前", "在你继续"]
+        let before = items.count
+        items = items.filter { it in
+            if it.url.contains("news.google.com") { return false }
+            let low = it.title.lowercased()
+            for b in badTitles where low.contains(b) { return false }
+            return true
+        }
+        if items.count != before { persistFeed() }
+    }
+
     private func persistFeed() {
         guard let d = try? JSONEncoder().encode(items) else { return }
         try? d.write(to: feedURL, options: .atomic)
