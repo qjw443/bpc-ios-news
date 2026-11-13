@@ -132,7 +132,7 @@ final class Discovery: NSObject {
                 }
                 // 仍是 401/403：交给浏览器中继（WS 挑战只能靠执行 JS 通过）
                 if [401, 403].contains(code) {
-                    self.browserRelay(ep, completion: completion)
+                    self.browserRelay(ep, full: true, completion: completion)
                     return
                 }
                 let note = err?.localizedDescription ?? "HTTP \(code)"
@@ -170,7 +170,7 @@ final class Discovery: NSObject {
             guard let url = URL(string: u) else { continue }
             group.enter()
             var req = URLRequest(url: url, timeoutInterval: 20)
-            req.setValue(Self.uas[1], forHTTPHeaderField: "User-Agent")
+            req.setValue(Self.uas[min(1, Self.uas.count - 1)], forHTTPHeaderField: "User-Agent")
             session.dataTask(with: req) { data, resp, _ in
                 guard let data = data, (resp as? HTTPURLResponse)?.statusCode == 200 else {
                     group.leave()
@@ -208,10 +208,17 @@ final class Discovery: NSObject {
     private var scrapers: [WebScraper] = []
     private var relayKeepAlive: [BrowserFetcher] = []
     private var lastWebScrape = Date.distantPast
+    private var lastRelay = Date.distantPast
 
     /// HTTP 被 401/403 挡住时的浏览器中继：用 WKWebView 执行挑战 JS 后再取同一份资源
-    private func browserRelay(_ ep: Sources.Endpoint,
+    private func browserRelay(_ ep: Sources.Endpoint, full: Bool = true,
                               completion: @escaping ([Discovery.Found], String) -> Void) {
+        // 中继一次最多 36 秒（3 次 × 12 秒）：快轮次必须节流，否则整轮刷新被拖死
+        if !full && Date().timeIntervalSince(lastRelay) < 120 {
+            completion([], "401/403 · 中继节流中")
+            return
+        }
+        lastRelay = Date()
         let fetcher = BrowserFetcher()
         relayKeepAlive.append(fetcher)
         fetcher.fetchText(urlString: ep.url, site: ep.site) { [weak self] text in

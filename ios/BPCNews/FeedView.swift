@@ -65,6 +65,7 @@ struct FeedView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             masthead.id("top")
+                            metricsStrip
                             quickBar
                             if !store.lastError.isEmpty { errorStrip }
                             if store.loading && store.items.isEmpty {
@@ -194,7 +195,7 @@ struct FeedView: View {
                     }
                     Button {
                         haptic(.medium)
-                        store.refresh(notify: false) { translateTitles() }
+                        store.refresh(notify: true) { translateTitles() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 13, weight: .semibold))
@@ -233,6 +234,54 @@ struct FeedView: View {
     }
 
     private var unreadCount: Int { store.items.filter { !$0.read }.count }
+
+    // MARK: - 指标区（企业看板风格）
+
+    private var metricsStrip: some View {
+        HStack(spacing: 0) {
+            metric("彭博延迟", latencyText(store.bbgLatency), ok: store.bbgLatency >= 0 && store.bbgLatency < 3600)
+            metricDivider
+            metric("路透延迟", latencyText(store.rtrLatency), ok: store.rtrLatency >= 0 && store.rtrLatency < 3600)
+            metricDivider
+            metric("未读", "\(unreadCount)", ok: true)
+            metricDivider
+            metric("本轮", store.lastRoundMs >= 0
+                    ? String(format: "%.1fs", Double(store.lastRoundMs) / 1000) : "—",
+                   ok: store.lastRoundMs >= 0)
+        }
+        .padding(.vertical, 9)
+        .background(Theme.surface.opacity(0.55))
+        .overlay(Hairline(), alignment: .top)
+        .overlay(Hairline(), alignment: .bottom)
+        .padding(.bottom, 10)
+    }
+
+    private func latencyText(_ s: Int) -> String {
+        if s < 0 { return "—" }
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m" }
+        return "\(s / 3600)h"
+    }
+
+    private func metric(_ label: String, _ value: String, ok: Bool) -> some View {
+        VStack(spacing: 3) {
+            Text(label.uppercased())
+                .font(.system(size: 7.5, weight: .semibold))
+                .tracking(0.6)
+                .foregroundColor(Theme.hairline)
+            HStack(spacing: 3) {
+                Circle().fill(ok ? Theme.orange : Color.red).frame(width: 3.5, height: 3.5)
+                Text(value)
+                    .font(.mono(13))
+                    .foregroundColor(Theme.ink)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var metricDivider: some View {
+        Rectangle().fill(Theme.hairline).frame(width: 0.5, height: 22)
+    }
 
     // MARK: - 快捷栏
 
@@ -360,7 +409,7 @@ struct FeedView: View {
                 .lineSpacing(3)
             Button {
                 haptic(.medium)
-                store.refresh(notify: false) { translateTitles() }
+                store.refresh(notify: true) { translateTitles() }
             } label: {
                 Text("立即抓一轮")
                     .font(.system(size: 12, weight: .semibold))
@@ -515,6 +564,7 @@ struct FeedView: View {
             }
         }
         if changed { store.items = Library.shared.items }
+        store.notifyPending()
     }
 }
 

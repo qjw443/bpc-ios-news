@@ -98,6 +98,16 @@ struct SettingsView: View {
             LabeledContent("后台刷新") {
                 Text("系统调度（15–60 分钟）").font(.system(size: 11)).foregroundColor(Theme.inkDim)
             }
+            Button {
+                AppDelegate.sendTestNotification()
+                message = "已排入一条测试通知（2 秒后）"
+            } label: {
+                HStack {
+                    Text("发送测试通知").foregroundColor(Theme.orange)
+                    Spacer()
+                    Image(systemName: "bell.badge").font(.system(size: 12)).foregroundColor(Theme.orange)
+                }
+            }
             Toggle(isOn: $keepAlive) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("后台保活（更强）").foregroundColor(Theme.ink)

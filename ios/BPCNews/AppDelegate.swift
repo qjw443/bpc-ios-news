@@ -60,7 +60,30 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { ok, err in
+            UserDefaults.standard.set(ok, forKey: "notif_authorized")
+            if let err = err { print("[notif] auth error: \(err.localizedDescription)") }
+            // 被拒时给出可见提示（设置页也会显示状态）
+            print("[notif] authorized=\(ok)")
+        }
+    }
+
+    /// 发送一条测试通知（设置页按钮调用，用来验证权限与展示）
+    static func sendTestNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "【测试】通知链路正常"
+        content.subtitle = TimeFmt.feedText(Int(Date().timeIntervalSince1970)) + " 北京时间"
+        content.body = "如果你看到这条，说明本地通知与前台展示都工作正常。"
+        content.sound = .default
+        content.categoryIdentifier = "BPC_NEWS"
+        if #available(iOS 15.0, *) { content.interruptionLevel = .timeSensitive }
+        let req = UNNotificationRequest(identifier: "bpc.test.\(UUID().uuidString)",
+                                        content: content,
+                                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 2,
+                                                                                  repeats: false))
+        UNUserNotificationCenter.current().add(req) { err in
+            if let err = err { print("[notif] test add error: \(err.localizedDescription)") }
+        }
     }
 
     // MARK: - 后台刷新（系统调度，用来「自动发现」）

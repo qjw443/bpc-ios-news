@@ -65,8 +65,9 @@ final class Library {
     private let queue = DispatchQueue(label: "bpc.library")
 
     private var dir: URL {
-        let u = FileManager.default.urls(for: .applicationSupportDirectory,
-                                        in: .userDomainMask)[0]
+        let dirs = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask)
+        let u = dirs.first ?? URL(fileURLWithPath: NSTemporaryDirectory())
         if !FileManager.default.fileExists(atPath: u.path) {
             try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         }

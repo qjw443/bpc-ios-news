@@ -43,7 +43,7 @@ private struct SystemTranslateModifier: ViewModifier {
             let responses = try await session.translations(from: requests)
             var out = [String](repeating: "", count: texts.count)
             for r in responses {
-                if let cid = r.clientIdentifier, let i = Int(cid), i < out.count {
+                if let cid = r.clientIdentifier, let i = Int(cid), i >= 0, i < out.count {
                     out[i] = r.targetText
                 }
             }

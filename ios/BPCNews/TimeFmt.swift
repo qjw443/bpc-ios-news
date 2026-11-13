@@ -3,7 +3,7 @@ import Foundation
 /// 时间显示：所有时间统一换算成**北京时间（Asia/Shanghai, UTC+8）**。
 /// 源站用的都是 UTC / GMT，直接显示会差 8 小时，所以这里集中处理，避免各处再写时区。
 enum TimeFmt {
-    static let beijing = TimeZone(identifier: "Asia/Shanghai") ?? TimeZone(secondsFromGMT: 8 * 3600)!
+    static let beijing = TimeZone(identifier: "Asia/Shanghai") ?? TimeZone(secondsFromGMT: 8 * 3600) ?? .current
 
     private static let hm: DateFormatter = {
         let f = DateFormatter()

@@ -197,6 +197,10 @@ final class FeedStore: ObservableObject {
                 if notify && !pushable.isEmpty {
                     if UIApplication.shared.applicationState == .active {
                         self.pendingNotify = pushable
+                        // 兜底：无论翻译是否成功，4 秒后一定把待推送发出去
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                            self?.notifyPending()
+                        }
                     } else {
                         self.notifyNew(pushable)
                     }
@@ -311,11 +315,17 @@ final class FeedStore: ObservableObject {
                 content.subtitle = "最新 " + TimeFmt.feedText(first.ts) + " 北京时间"
             }
             content.sound = .default
+            if #available(iOS 15.0, *) {
+                content.interruptionLevel = .timeSensitive
+                content.relevanceScore = 1.0
+            }
             content.threadIdentifier = first.site.rawValue
             content.categoryIdentifier = "BPC_NEWS"
             content.userInfo = ["itemId": first.id]
+            // 用 1 秒触发器：比 nil 更稳（nil 在部分系统版本上会被合并或静默丢弃）
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             let req = UNNotificationRequest(identifier: UUID().uuidString,
-                                            content: content, trigger: nil)
+                                            content: content, trigger: trigger)
             UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
         }
 
