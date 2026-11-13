@@ -7,9 +7,15 @@ struct BPCNewsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            FeedView()
-                .environmentObject(store)
-                .preferredColorScheme(.dark)
+            TabView {
+                FeedView()
+                    .environmentObject(store)
+                    .tabItem { Label("新闻", systemImage: "newspaper.fill") }
+                MacroView()
+                    .tabItem { Label("宏观", systemImage: "chart.xyaxis.line") }
+            }
+            .tint(Theme.orange)
+            .preferredColorScheme(.dark)
         }
     }
 }

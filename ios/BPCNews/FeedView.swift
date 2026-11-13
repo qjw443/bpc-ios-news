@@ -17,10 +17,12 @@ enum FeedFilter: String, CaseIterable, Identifiable {
 
 struct FeedView: View {
     @EnvironmentObject private var store: FeedStore
+
     @State private var path: [String] = []
     @State private var showSettings = false
     @State private var showOnboarding = false
     @AppStorage("onboarded") private var onboarded = false
+    @AppStorage("notif_authorized") private var notifAuthorized: Bool = true
 
     // 快捷筛选
     @State private var query = ""
@@ -29,33 +31,15 @@ struct FeedView: View {
     @State private var shareItems: [Any] = []
     @State private var showShare = false
 
-    // 标题中文化
-    @State private var titleIds: [String] = []
-    @State private var titleTexts: [String] = []
-    @State private var titleResults: [String] = []
+    // 标题中文化（TranslateService 驱动，与视图生命周期解耦）
     @State private var titleBusy = false
-    @State private var titleError = ""
-    @State private var titleNonce = 0
-    @State private var activeNonce = -1
     @State private var titleTried: Set<String> = []
-    @State private var batchTimeout: DispatchWorkItem?
-
-    // 可见优先翻译
     @State private var visibleIds: Set<String> = []
 
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
     @Environment(\.scenePhase) private var scenePhase
 
-    var body: some View {
-        SystemTranslateBox(texts: titleTexts,
-                           results: $titleResults,
-                           busy: $titleBusy,
-                           errorText: $titleError,
-                           nonce: titleNonce) {
-            content
-        }
-        .onChange(of: titleResults) { new in applyTitles(new) }
-    }
+    var body: some View { content }
 
     private var content: some View {
         NavigationStack(path: $path) {
@@ -68,8 +52,9 @@ struct FeedView: View {
                             masthead.id("top")
                             metricsStrip
                             quickBar
-                            if !store.lastError.isEmpty { errorStrip }
                             if !notifAuthorized { notifStrip }
+                            if !store.lastError.isEmpty { errorStrip }
+
                             if store.loading && store.items.isEmpty {
                                 skeleton
                             } else if filtered.isEmpty {
@@ -111,7 +96,7 @@ struct FeedView: View {
                             }
                             colophon
                         }
-                        .padding(.bottom, 90)
+                        .padding(.bottom, 96)
                     }
                     .refreshable { await pull() }
 
@@ -135,7 +120,6 @@ struct FeedView: View {
                 }
             }
             .onChange(of: store.items.count) { _ in translateTitles() }
-            // 关键：数据层每有新稿就 +1，不管刷新来自前台定时器还是后台任务
             .onChange(of: store.newItemsToken) { _ in translateTitles() }
             .onReceive(openItem) { note in
                 if let id = note.object as? String {
@@ -163,23 +147,21 @@ struct FeedView: View {
     private func scrollTopButton(_ proxy: ScrollViewProxy) -> some View {
         Button {
             haptic(.light)
-            withAnimation(.easeOut(duration: 0.34)) {
-                proxy.scrollTo("top", anchor: .top)
-            }
+            withAnimation(.easeOut(duration: 0.34)) { proxy.scrollTo("top", anchor: .top) }
         } label: {
             Image(systemName: "arrow.up")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(Theme.ink)
                 .frame(width: 48, height: 48)
                 .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().fill(Theme.bg.opacity(0.26)))
                 .overlay(Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 0.6))
-                .overlay(Circle().fill(Theme.bg.opacity(0.28)))
                 .shadow(color: .black.opacity(0.45), radius: 12, y: 5)
         }
         .accessibilityLabel("回到顶部")
     }
 
-    // MARK: - 顶部速度条
+    // MARK: - 顶部
 
     private var masthead: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -190,9 +172,9 @@ struct FeedView: View {
                         .tracking(1.2)
                         .foregroundColor(Theme.ink)
                     HStack(spacing: 6) {
-                    Kicker(text: "BLOOMBERG · REUTERS　本机直连", size: 8.5)
-                    countdownPill
-                }
+                        Kicker(text: "BLOOMBERG · REUTERS", size: 8.5)
+                        countdownPill
+                    }
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 6) {
@@ -246,7 +228,7 @@ struct FeedView: View {
 
     private var unreadCount: Int { store.items.filter { !$0.read }.count }
 
-    /// 下一个自动刷新倒计时（金融场景要能看到「下一次更新还有多久」）
+    /// 下一次自动刷新倒计时
     private var countdownPill: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let interval = max(15, Settings.pollSeconds)
@@ -266,7 +248,7 @@ struct FeedView: View {
         }
     }
 
-    // MARK: - 指标区（企业看板风格）
+    // MARK: - 指标区
 
     private var metricsStrip: some View {
         HStack(spacing: 0) {
@@ -302,9 +284,7 @@ struct FeedView: View {
                 .foregroundColor(Theme.hairline)
             HStack(spacing: 3) {
                 Circle().fill(ok ? Theme.orange : Color.red).frame(width: 3.5, height: 3.5)
-                Text(value)
-                    .font(.mono(13))
-                    .foregroundColor(Theme.ink)
+                Text(value).font(.mono(13)).foregroundColor(Theme.ink)
             }
         }
         .frame(maxWidth: .infinity)
@@ -402,7 +382,7 @@ struct FeedView: View {
         }
     }
 
-    // MARK: - 骨架 / 空态
+    // MARK: - 骨架 / 空态 / 提示条
 
     private var skeleton: some View {
         VStack(spacing: 0) {
@@ -427,7 +407,8 @@ struct FeedView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: query.isEmpty && filter == .all ? "antenna.radiowaves.left.and.right" : "magnifyingglass")
+            Image(systemName: query.isEmpty && filter == .all
+                  ? "antenna.radiowaves.left.and.right" : "magnifyingglass")
                 .font(.system(size: 24, weight: .light))
                 .foregroundColor(Theme.hairline)
             Text(emptyTitle)
@@ -468,12 +449,10 @@ struct FeedView: View {
 
     private var emptyHint: String {
         if !query.isEmpty { return "换个关键词，或点右上角 × 清空搜索" }
-        if filter == .unread { return "下拉或等自动刷新，新稿会自动出现在最上面" }
+        if filter == .unread { return "等自动刷新，新稿会自动出现在最上面" }
         if filter == .saved { return "长按任意一条，点「收藏」即可加入" }
         return "检查网络或 VPN；也可以在设置里确认两个源的健康度"
     }
-
-    @AppStorage("notif_authorized") private var notifAuthorized: Bool = true
 
     private var notifStrip: some View {
         Button {
@@ -523,7 +502,7 @@ struct FeedView: View {
 
     private func pull() async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            store.refresh {
+            store.refresh(notify: true) {
                 titleTried.removeAll()
                 translateTitles()
                 cont.resume()
@@ -548,29 +527,21 @@ struct FeedView: View {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 
-    // MARK: - 标题中文化
+    // MARK: - 标题中文化（TranslateService）
 
     private func translateSoon() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { translateTitles() }
     }
 
-    /// 策略：可见优先 → 其余按到达顺序；系统翻译不可用时用词典兜底，保证不出现整行英文
     private func translateTitles() {
-        if Settings.zhMode == "sys" {
-            systemBatch()
-        } else {
-            dictFill()
-        }
-    }
-
-    private func systemBatch() {
         guard !titleBusy else { return }
+
         let pool = store.items.filter { $0.titleZh.isEmpty && !titleTried.contains($0.id) }
         guard !pool.isEmpty else {
             dictFill()
             return
         }
-        // 可见的排前面
+
         let visibleFirst = pool.filter { visibleIds.contains($0.id) }
         let rest = pool.filter { !visibleIds.contains($0.id) }
         let batch = Array((visibleFirst + rest).prefix(40))
@@ -579,67 +550,21 @@ struct FeedView: View {
         for it in batch { titleTried.insert(it.id) }
         if titleTried.count > 1200 { titleTried = Set(titleTried.suffix(600)) }
 
-        titleIds = batch.map { $0.id }
-        titleTexts = batch.map { $0.title }
-        titleResults = []
         titleBusy = true
-        titleNonce += 1
-        activeNonce = titleNonce
-
-        // 超时保护：12 秒没回结果就放弃这一批，立刻用词典兜底并继续下一批
-        batchTimeout?.cancel()
-        let timeout = DispatchWorkItem {
-            guard titleBusy else { return }
-            titleBusy = false
-            let ids = titleIds
-            let texts = titleTexts
-            titleIds = []; titleTexts = []; titleResults = []
-            for (i, id) in ids.enumerated() where i < texts.count {
-                let zh = Dict.translate(texts[i])
-                if !zh.isEmpty, zh != texts[i] { Library.shared.setTitleZh(id, zh) }
+        let texts = batch.map { $0.title }
+        TranslateService.shared.translate(texts) { results, _ in
+            for (i, it) in batch.enumerated() where i < results.count {
+                let t = results[i].trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !t.isEmpty, t != it.title else { continue }
+                Library.shared.setTitleZh(it.id, t)
             }
             store.items = Library.shared.items
-            sendPendingIfAny()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { translateTitles() }
+            titleBusy = false
+            store.notifyPending()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { translateTitles() }
         }
-        batchTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: timeout)
     }
 
-    private func applyTitles(_ zh: [String]) {
-        guard activeNonce == titleNonce else { return }
-        batchTimeout?.cancel()
-        batchTimeout = nil
-        guard !titleIds.isEmpty, zh.count == titleIds.count else { return }
-        for (i, id) in titleIds.enumerated() where i < zh.count {
-            let t = zh[i].trimmed
-            guard !t.isEmpty else { continue }
-            let srcLen = titleTexts.indices.contains(i) ? titleTexts[i].count : 0
-            if srcLen > 24 && t.count < 6 { continue }
-            Library.shared.setTitleZh(id, t)
-        }
-        // 本批没收到的，词典补上（列表里不留整行英文）
-        for (i, id) in titleIds.enumerated() where i < titleTexts.count {
-            if let it = Library.shared.item(for: id), it.titleZh.isEmpty {
-                let zh = Dict.translate(titleTexts[i])
-                if !zh.isEmpty, zh != titleTexts[i] { Library.shared.setTitleZh(id, zh) }
-            }
-        }
-        store.items = Library.shared.items
-        titleIds = []
-        titleTexts = []
-        titleResults = []
-        titleBusy = false
-        sendPendingIfAny()
-        // 连续补翻：立刻排下一批（可见优先），直到没有待译条目
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { translateTitles() }
-    }
-
-    private func sendPendingIfAny() {
-        store.notifyPending()
-    }
-
-    /// 词典兜底：把仍为英文的标题填上中文（本地、零延迟）
     private func dictFill() {
         var changed = false
         for it in store.items where it.titleZh.isEmpty {
