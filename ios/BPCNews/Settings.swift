@@ -33,11 +33,13 @@ enum Settings {
             ? true
             : UserDefaults.standard.bool(forKey: "auto_monitor")
     }
-    /// 前台轮询间隔（秒）
+    /// 轮询间隔（秒）：默认 30 秒，最低 15 秒
     static var pollSeconds: Int {
         let v = UserDefaults.standard.integer(forKey: "poll_seconds")
-        return v < 30 ? 60 : v
+        return v < 15 ? 30 : v
     }
+    /// 后台保活（播放静音音频换取后台运行时间，默认关闭）
+    static var keepAlive: Bool { UserDefaults.standard.bool(forKey: "keep_alive") }
 
     static var autoFetch: Bool {
         UserDefaults.standard.object(forKey: "auto_fetch") == nil

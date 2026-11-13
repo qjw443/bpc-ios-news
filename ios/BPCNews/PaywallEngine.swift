@@ -240,7 +240,10 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
                 let t = (b.text ?? "").trimmed
                 // 纯文本模式：图片块直接丢弃（用户要的是速度，不是图）
                 if b.type == "img" { return nil }
-                return t.isEmpty && b.type != "hr" ? nil : Block(type: b.type, text: t, src: b.src)
+                // 去掉内联标签（<a>、<em> 等），只保留纯文字：用户要求正文不显示链接
+                let plain = t.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                let clean = plain.replacingOccurrences(of: "&nbsp;", with: " ").trimmed
+                return clean.isEmpty && b.type != "hr" ? nil : Block(type: b.type, text: clean, src: nil)
             }
 
             if blocks.count < 3 && !self.archiveTried {

@@ -16,6 +16,7 @@ final class FeedStore: ObservableObject {
     private let discovery = Discovery()
     private var fetchers: [String: ArticleFetcher] = [:]
     private var busy = false
+    private var roundCount = 0
     private let lastCheckKey = "last_discovery_ts"
 
     // 自动监控
@@ -123,7 +124,9 @@ final class FeedStore: ObservableObject {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 50, execute: watchdog)
 
-        discovery.poll { [weak self] found in
+        roundCount += 1
+        let full = (roundCount % 3 == 1)   // 每 3 轮做一次全量（sitemap + 路透兜底）
+        discovery.poll(full: full) { [weak self] found in
             guard let self = self else { return }
             guard !finished else { return }
             finished = true

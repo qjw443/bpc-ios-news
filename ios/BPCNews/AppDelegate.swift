@@ -37,10 +37,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         requestNotificationPermission()
         FeedStore.shared.bootstrap()
         FeedStore.shared.startMonitoring()
+        if Settings.keepAlive { SilentKeeper.start() }
         return true
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
+        SilentKeeper.stop()
         FeedStore.shared.startMonitoring()
         FeedStore.shared.refresh()
     }
@@ -52,7 +54,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // MARK: - 后台刷新（系统调度，用来「自动发现」）
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        FeedStore.shared.stopMonitoring()   // 前台定时器停掉，交给系统后台任务
+        if Settings.keepAlive {
+            // 保活模式：音频后台模式让 App 继续运行，定时器不停
+            SilentKeeper.start()
+        } else {
+            FeedStore.shared.stopMonitoring()   // 普通模式：交给系统后台任务
+        }
 
         // 退后台时抢跑一轮：申请 background assertion，争取在挂起前把发现跑完
         bgAssertion = application.beginBackgroundTask(withName: "bpc.refresh.onbackground") {

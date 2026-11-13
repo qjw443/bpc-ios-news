@@ -11,7 +11,8 @@ struct SettingsView: View {
     @AppStorage("auto_fetch") private var autoFetch: Bool = true
     @AppStorage("fresh_hours") private var freshHours: Int = 24
     @AppStorage("auto_monitor") private var autoMonitor: Bool = true
-    @AppStorage("poll_seconds") private var pollSeconds: Int = 60
+    @AppStorage("poll_seconds") private var pollSeconds: Int = 30
+    @AppStorage("keep_alive") private var keepAlive: Bool = false
     @AppStorage("translate_on_open") private var translateOnOpen: Bool = false
     @AppStorage("zh_mode") private var zhMode: String = "dict"
     @AppStorage("llm_url") private var llmURL: String = "https://api.deepseek.com/chat/completions"
@@ -58,6 +59,9 @@ struct SettingsView: View {
                 }
                 loadNotifStatus()
             }
+            .onChange(of: keepAlive) { on in
+                if on { SilentKeeper.start() } else { SilentKeeper.stop() }
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -94,10 +98,17 @@ struct SettingsView: View {
             LabeledContent("后台刷新") {
                 Text("系统调度（15–60 分钟）").font(.system(size: 11)).foregroundColor(Theme.inkDim)
             }
+            Toggle(isOn: $keepAlive) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("后台保活（更强）").foregroundColor(Theme.ink)
+                    Text("播放静音音频以争取后台运行时间，耗电")
+                        .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+                }
+            }.tint(Theme.orange)
         } header: {
             Kicker(text: "通知").padding(.bottom, 2)
         } footer: {
-            Text("iOS 不允许普通 App 常驻后台：退到后台后由系统按电量/使用习惯调度两路任务（App 刷新 + 处理任务）。想要更及时，请保持 App 在前台，或打开 App 触发一次补推。")
+            Text("普通模式下 iOS 只允许系统按电量/使用习惯调度后台任务。打开「后台保活」后，App 用静音音频维持后台运行，定时器继续按设定间隔抓取并本地通知（更及时，但更耗电）。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)
@@ -167,10 +178,10 @@ struct SettingsView: View {
                 }
             }.tint(Theme.orange)
             Picker(selection: $pollSeconds) {
+                Text("15 秒（极速）").tag(15)
                 Text("30 秒").tag(30)
                 Text("60 秒").tag(60)
                 Text("2 分钟").tag(120)
-                Text("5 分钟").tag(300)
             } label: {
                 Text("轮询间隔").foregroundColor(Theme.ink)
             }

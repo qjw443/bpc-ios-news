@@ -48,7 +48,8 @@ final class Discovery: NSObject {
     // MARK: - 入口
 
     /// 拉一轮：先 HTTP，两个站各自不足 5 条时补一次网页抓取
-    func poll(completion: @escaping ([Discovery.Found]) -> Void) {
+    /// full=true 才拉 sitemap 与网页兜底；普通轮次只拉「小、快」的 RSS
+    func poll(full: Bool = true, completion: @escaping ([Discovery.Found]) -> Void) {
         statuses = []
         let group = DispatchGroup()
         let lock = NSLock()
@@ -57,6 +58,7 @@ final class Discovery: NSObject {
 
         for site in Site.allCases {
             for ep in Sources.endpoints(for: site) {
+                if !full && ep.kind == .sitemap { continue }   // 快轮次跳过 sitemap（300KB+）
                 group.enter()
                 fetch(ep) { found, note in
                     lock.lock()
@@ -73,8 +75,10 @@ final class Discovery: NSObject {
 
         group.notify(queue: .main) {
             var needWeb: [Site] = []
-            for site in Site.allCases where (perSite[site.rawValue] ?? 0) < 5 {
-                needWeb.append(site)
+            if full {
+                for site in Site.allCases where (perSite[site.rawValue] ?? 0) < 5 {
+                    needWeb.append(site)
+                }
             }
             guard !needWeb.isEmpty else {
                 completion(self.dedupe(collected))

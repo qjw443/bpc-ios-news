@@ -44,6 +44,7 @@ targets:
           - UIInterfaceOrientationPortrait
         UIUserInterfaceStyle: Automatic
         UIBackgroundModes:
+          - audio
           - fetch
           - processing
           - remote-notification

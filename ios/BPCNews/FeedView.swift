@@ -14,6 +14,7 @@ struct FeedView: View {
     @State private var titleBusy = false
     @State private var titleError = ""
     @State private var titleNonce = 0
+    @State private var activeNonce = -1
 
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
     @Environment(\.scenePhase) private var scenePhase
@@ -110,13 +111,20 @@ struct FeedView: View {
         titleResults = []
         titleBusy = true
         titleNonce += 1
+        activeNonce = titleNonce
     }
 
     private func applyTitles(_ zh: [String]) {
+        // 批次校验：旧批次的迟到结果绝不能写到新 id 上（否则会出现「技术」这种错位标题）
+        guard activeNonce == titleNonce else { return }
         guard !titleIds.isEmpty, zh.count == titleIds.count else { return }
         for (i, id) in titleIds.enumerated() where i < zh.count {
-            let t = zh[i]
-            if !t.isEmpty { Library.shared.setTitleZh(id, t) }
+            let t = zh[i].trimmed
+            guard !t.isEmpty else { continue }
+            // 合理性检查：原文很长却只翻出几个字，视为错位/失败，丢弃
+            let srcLen = titleTexts.indices.contains(i) ? titleTexts[i].count : 0
+            if srcLen > 24 && t.count < 6 { continue }
+            Library.shared.setTitleZh(id, t)
         }
         store.items = Library.shared.items
         titleIds = []
