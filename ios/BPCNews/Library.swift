@@ -21,10 +21,11 @@ struct FeedItem: Codable, Identifiable, Equatable {
     let site: Site
     let title: String
     var url: String           // Google 跳转解析后会被就地改写为真实文章地址
-    let ts: Int               // unix 秒
+    let ts: Int               // 发布时间（unix 秒，UTC）
     var titleZh: String = ""
     var brief: [String] = []
     var fetched: Bool = false // 正文是否已抓到本地
+    var imageURL: String? = nil   // 列表缩略图（来自 og:image / 正文首图）
 }
 
 struct Block: Codable, Equatable {
@@ -173,6 +174,13 @@ final class Library {
     func setTitleZh(_ id: String, _ zh: String) {
         guard let i = items.firstIndex(where: { $0.id == id }), items[i].titleZh != zh else { return }
         items[i].titleZh = zh
+        persistFeed()
+    }
+
+    /// 列表缩略图
+    func setImage(_ id: String, _ url: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }), items[i].imageURL != url else { return }
+        items[i].imageURL = url
         persistFeed()
     }
 

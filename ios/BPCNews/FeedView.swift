@@ -57,9 +57,12 @@ struct FeedView: View {
             .onChange(of: scenePhase) { phase in
                 if phase == .active {
                     store.startMonitoring()
-                    store.refresh()
-                    translateTitles()
+                    store.refresh { translateTitles() }
                 }
+            }
+            .onChange(of: store.items.count) { _ in
+                // 自动监控刷进新稿时也立刻翻译标题
+                translateTitles()
             }
             .onReceive(openItem) { note in
                 if let id = note.object as? String {
@@ -83,9 +86,11 @@ struct FeedView: View {
 
     private func pull() async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            store.refresh { cont.resume() }
+            store.refresh {
+                translateTitles()      // 新稿进来立刻翻，秒级出中文
+                cont.resume()
+            }
         }
-        translateTitles()
     }
 
     // MARK: - 标题中文化
@@ -195,57 +200,75 @@ struct FeedView: View {
         .padding(.horizontal, 18)
     }
 }
-
 struct FeedRow: View {
     let item: FeedItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                SourceTag(site: item.site.rawValue)
-                Kicker(text: FeedRow.relative(item.ts), size: 9)
-                Spacer()
-                if item.fetched {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 9))
-                        .foregroundColor(Theme.hairline)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    SourceTag(site: item.site.rawValue)
+                    Kicker(text: TimeFmt.feedText(item.ts) + " 北京", size: 9)
+                    Spacer()
+                    if item.fetched {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(Theme.hairline)
+                    }
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(Theme.hairline)
-            }
 
-            Text(item.titleZh.isEmpty ? item.title : item.titleZh)
-                .font(.editorial(19))
-                .foregroundColor(Theme.ink)
-                .lineSpacing(3)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !item.titleZh.isEmpty {
-                Text(item.title)
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.inkDim)
-                    .lineLimit(2)
+                Text(item.titleZh.isEmpty ? item.title : item.titleZh)
+                    .font(.editorial(18))
+                    .foregroundColor(Theme.ink)
+                    .lineSpacing(3)
+                    .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if !item.brief.isEmpty {
-                Text(item.brief.joined(separator: "　／　"))
-                    .font(.system(size: 12.5))
-                    .foregroundColor(Theme.inkDim)
-                    .lineLimit(3)
+
+                if !item.titleZh.isEmpty {
+                    Text(item.title)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(Theme.inkDim)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if !item.brief.isEmpty {
+                    Text(item.brief.joined(separator: "　／　"))
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.inkDim)
+                        .lineLimit(2)
+                }
             }
+
+            thumbnail
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)
-        .padding(.vertical, 17)
+        .padding(.vertical, 16)
         .contentShape(Rectangle())
     }
 
-    static func relative(_ ts: Int) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.unitsStyle = .short
-        return f.localizedString(for: Date(timeIntervalSince1970: TimeInterval(ts)),
-                                 relativeTo: Date())
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let s = item.imageURL, let u = URL(string: s) {
+            AsyncImage(url: u) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                default:
+                    Rectangle().fill(Theme.raised)
+                }
+            }
+            .frame(width: 86, height: 66)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Theme.raised)
+                .frame(width: 86, height: 66)
+                .overlay(
+                    Image(systemName: "newspaper")
+                        .font(.system(size: 15))
+                        .foregroundColor(Theme.hairline)
+                )
+        }
     }
 }

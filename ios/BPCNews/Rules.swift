@@ -172,7 +172,24 @@ enum Rules {
             else if(t==='media'&&p.data&&p.data.image&&p.data.image.url)
               out.blocks.push({type:'img',text:(p.data.image.caption||''),src:p.data.image.url});
           }
-          if(out.blocks.length>=3){ out.via='next_data'; walls(); return JSON.stringify(out); }
+          if(out.blocks.length>=3){
+            // JSON 里没有配图时，补一遍页面里的 figure（官网排版里图片是正文的一部分）
+            var hasImg = false;
+            for (var bi=0; bi<out.blocks.length; bi++) if (out.blocks[bi].type==='img') { hasImg = true; break; }
+            if (!hasImg && out.blocks.length <= 14) {
+              var figs = document.querySelectorAll('article figure, figure');
+              for (var fi=0; fi<figs.length && fi<6; fi++) {
+                var im = figs[fi].querySelector('img');
+                if (!im) continue;
+                var s2 = im.currentSrc || im.src || im.getAttribute('data-src') || '';
+                if (!s2 || s2.indexOf('data:') === 0) continue;
+                if (s2.indexOf('//') === 0) s2 = 'https:' + s2;
+                var cap = figs[fi].querySelector('figcaption');
+                out.blocks.push({type:'img', text:(cap?cap.innerText:'').trim().slice(0,200), src:s2});
+              }
+            }
+            out.via='next_data'; walls(); return JSON.stringify(out);
+          }
         }
       }
 
@@ -200,11 +217,25 @@ enum Rules {
     })();
     """#
 
-    /// Reuters 三层：paragraph-N → Article 内 p → article/main p
+    /// Reuters：按 DOM 文档顺序取「段落 + 图（含图注）」，接近官网排版
     static let extractReuters = #"""
     (function(){
       var out={title:'',blocks:[],summary:[],audio:'',via:'',walls:[]};
-      function push(t){ if(t&&t.trim().length>1) out.blocks.push({type:'p',text:t.trim()}); }
+      function pushText(t){
+        if(!t) return;
+        var s=t.replace(/\s+\n/g,'\n').trim();
+        if(s.length>1 && !/^(advertisement|read more|sign up|register)/i.test(s))
+          out.blocks.push({type:'p',text:s});
+      }
+      function pushFigure(fig){
+        var img=fig.querySelector('img');
+        if(!img) return;
+        var src=img.currentSrc||img.src||img.getAttribute('data-src')||'';
+        if(!src || src.indexOf('data:')===0) return;
+        if(src.indexOf('//')===0) src='https:'+src;
+        var cap=fig.querySelector('figcaption');
+        out.blocks.push({type:'img', text:(cap?cap.innerText:'').trim().slice(0,200), src:src});
+      }
       function title(){
         var h=document.querySelector('h1');
         out.title=(h?h.innerText:document.title||'').trim();
@@ -219,33 +250,43 @@ enum Rules {
       function done(v){ out.via=v; walls(); return JSON.stringify(out); }
 
       title();
-      var nodes=document.querySelectorAll('div[data-testid^="paragraph-"], div[data-testid="paragraph"]');
-      if(nodes.length>=3){
+
+      // ① 段落与 figure 混排，保持官网顺序
+      var nodes=document.querySelectorAll('div[data-testid^="paragraph-"], div[data-testid="paragraph"], figure');
+      if(nodes.length>=2){
         for(var i=0;i<nodes.length;i++){
-          var t=(nodes[i].innerText||'').replace(/\s+\n/g,'\n');
-          if(!/^(advertisement|read more|sign up|register)/i.test(t.trim())) push(t);
+          if(nodes[i].tagName==='FIGURE') pushFigure(nodes[i]);
+          else pushText(nodes[i].innerText);
         }
-        if(out.blocks.length>=3) return done('testid_paragraph');
+        if(out.blocks.length>=3) return done('testid_mixed');
       }
 
+      // ② Article 容器内的 p + figure
       out.blocks=[];
       var art=document.querySelector('div[data-testid="Article"], article, main, [role="main"]');
       if(art){
-        var ps=art.querySelectorAll('p');
-        for(var k=0;k<ps.length;k++){
-          var s=(ps[k].innerText||'').trim();
-          if(s.length>40 && !/^(advertisement|read more)/i.test(s)) out.blocks.push({type:'p',text:s});
+        var kids=art.querySelectorAll('p, figure');
+        for(var k=0;k<kids.length;k++){
+          if(kids[k].tagName==='FIGURE') pushFigure(kids[k]);
+          else {
+            var s=(kids[k].innerText||'').trim();
+            if(s.length>40 && !/^(advertisement|read more)/i.test(s)) out.blocks.push({type:'p',text:s});
+          }
         }
       }
-      if(out.blocks.length>=3) return done('dom_article_p');
+      if(out.blocks.length>=3) return done('dom_article_mixed');
 
+      // ③ 全域兜底
       out.blocks=[];
-      var all=document.querySelectorAll('body p');
+      var all=document.querySelectorAll('body p, body figure');
       for(var m=0;m<all.length;m++){
-        var u=(all[m].innerText||'').trim();
-        if(u.length>60) out.blocks.push({type:'p',text:u});
+        if(all[m].tagName==='FIGURE') pushFigure(all[m]);
+        else {
+          var u=(all[m].innerText||'').trim();
+          if(u.length>60) out.blocks.push({type:'p',text:u});
+        }
       }
-      return done('dom_body_p');
+      return done('dom_body_mixed');
     })();
     """#
 

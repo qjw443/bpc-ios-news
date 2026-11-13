@@ -72,9 +72,12 @@ final class FeedStore: ObservableObject {
 
     func bootstrap() {
         Library.shared.load()
-        Library.shared.migrate()          // 清掉旧版 Google 源留下的脏条目
+        Library.shared.migrate()          // 清掉旧版第三方源留下的脏条目
         items = Library.shared.items
         status = "规则编译中…"
+        ThumbnailLoader.shared.onUpdate = { [weak self] in
+            self?.items = Library.shared.items
+        }
         PaywallEngine.shared.prepare { [weak self] in
             self?.status = "规则就绪（\(PaywallEngine.shared.compiledCount) 条）"
         }
@@ -152,6 +155,8 @@ final class FeedStore: ObservableObject {
                 self.lastCheck = Int(Date().timeIntervalSince1970)
                 UserDefaults.standard.set(self.lastCheck, forKey: "last_check_ts")
                 UserDefaults.standard.set(self.lastCheck, forKey: self.lastCheckKey)
+                // 标题带图：只为缺少缩略图的最新 12 条补 og:image（并发 3，失败跳过）
+                ThumbnailLoader.shared.fill(Library.shared.items, limit: 12)
             }
 
             // 推送只针对窗口内的新稿，避免一次推几十条历史
@@ -185,7 +190,12 @@ final class FeedStore: ObservableObject {
                 guard let self = self else { return }
                 var a = art
                 a.id = item.id
+                a.publishedTs = item.ts          // 发布时间随正文一起落盘（阅读页显示北京时间）
                 Library.shared.markFetched(item.id, article: a)
+                // 正文首图顺手当列表缩略图
+                if item.imageURL == nil, let img = a.blocks.first(where: { $0.type == "img" && $0.src != nil })?.src {
+                    Library.shared.setImage(item.id, img)
+                }
                 self.fetchers.removeValue(forKey: item.id)
                 DispatchQueue.main.async {
                     self.items = Library.shared.items

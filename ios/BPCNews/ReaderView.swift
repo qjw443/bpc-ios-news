@@ -95,11 +95,18 @@ struct ReaderView: View {
 
     // MARK: 头
 
-    private func header(_ a: Article) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    /// 发布时间统一显示为北京时间（源站是 UTC/GMT，直接显示会差 8 小时）
+    static func timeText(_ a: Article) -> String {
+        var ts = a.publishedTs ?? 0
+        if ts == 0 { ts = Library.shared.item(for: a.id)?.ts ?? 0 }
+        guard ts > 0 else { return "\(a.blocks.count) 段 · 时间未知" }
+        return "\(TimeFmt.fullText(ts)) 北京时间 · \(a.blocks.count) 段"
+    }
+
+    private func header(_ a: Article) -> some View {        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 SourceTag(site: a.site.rawValue)
-                Kicker(text: "\(a.blocks.count) 段 · \(a.fromArchive ? "archive 镜像" : "App 内直取")", size: 9)
+                Kicker(text: ReaderView.timeText(a), size: 9)
                 Spacer()
                 if !a.titleZh.isEmpty { Kicker(text: "已译", color: Theme.orange, size: 9) }
             }
@@ -183,16 +190,35 @@ struct ReaderView: View {
             Hairline().padding(.vertical, 6)
         case "img":
             if let src = b.src, let url = URL(string: src) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 7) {
+                    // 图片出血（贴齐屏幕两侧），图注留内边距 —— 贴近官网排版
                     AsyncImage(url: url) { phase in
                         switch phase {
-                        case .success(let image): image.resizable().scaledToFit()
-                        default: Rectangle().fill(Theme.raised).frame(height: 160)
+                        case .success(let image):
+                            image.resizable().scaledToFit()
+                        case .failure:
+                            Rectangle().fill(Theme.raised).frame(height: 140)
+                        default:
+                            Rectangle().fill(Theme.raised).frame(height: 160)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                    if !b.text.isEmpty { Kicker(text: b.text, size: 9) }
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                    .padding(.horizontal, -20)
+
+                    if !b.text.isEmpty {
+                        HStack(alignment: .top, spacing: 8) {
+                            Rectangle().fill(Theme.hairline).frame(width: 2)
+                            Text(b.text)
+                                .font(.system(size: 11))
+                                .foregroundColor(Theme.inkDim)
+                                .lineSpacing(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.top, 2)
+                    }
                 }
+                .padding(.vertical, 4)
             }
         default:
             Text(text)
