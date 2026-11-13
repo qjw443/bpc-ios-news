@@ -2,29 +2,30 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var push: PushManager
+    @ObservedObject private var store = FeedStore.shared
 
-    @AppStorage("api_base") private var base: String = Settings.defaultBase
-    @AppStorage("api_token") private var token: String = ""
-    @AppStorage("apns_env") private var apnsEnv: String = ""
     @AppStorage("src_bloomberg") private var srcBloomberg: Bool = true
     @AppStorage("src_reuters") private var srcReuters: Bool = true
-    @AppStorage("quiet_from") private var quietFrom: Int = 0
-    @AppStorage("quiet_to") private var quietTo: Int = 0
+    @AppStorage("auto_fetch") private var autoFetch: Bool = true
+    @AppStorage("translate_on_open") private var translateOnOpen: Bool = false
+    @AppStorage("llm_url") private var llmURL: String = "https://api.deepseek.com/chat/completions"
+    @AppStorage("llm_model") private var llmModel: String = "deepseek-chat"
+    @AppStorage("llm_key") private var llmKey: String = ""
 
-    @State private var message: String = ""
-    @State private var busy: Bool = false
+    @State private var message = ""
+    @State private var busy = false
+    @State private var rulesCount = 0
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Theme.bg.ignoresSafeArea()
                 Form {
-                    serverSection
                     sourceSection
-                    pushSection
-                    quietSection
-                    actionSection
+                    fetchSection
+                    translateSection
+                    dataSection
+                    aboutSection
                 }
                 .scrollContentBackground(.hidden)
                 .background(Theme.bg)
@@ -36,167 +37,139 @@ struct SettingsView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                        .foregroundColor(Theme.ink)
+                    Button("关闭") { dismiss() }.foregroundColor(Theme.ink)
                 }
             }
+            .onAppear { rulesCount = PaywallEngine.shared.compiledCount }
         }
         .preferredColorScheme(.dark)
-    }
-
-    private var serverSection: some View {
-        Section {
-            TextField("https://news.example.com", text: $base)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .keyboardType(.URL)
-                .foregroundColor(Theme.ink)
-            SecureField("API Token", text: $token)
-                .foregroundColor(Theme.ink)
-            Button {
-                Task { await testConnection() }
-            } label: {
-                HStack {
-                    Text("测试连接").foregroundColor(Theme.orange)
-                    if busy { Spacer(); ProgressView().tint(Theme.orange) }
-                }
-            }
-            .disabled(busy)
-        } header: {
-            Kicker(text: "服务器").padding(.bottom, 2)
-        } footer: {
-            if !message.isEmpty {
-                Text(message)
-                    .font(.system(size: 11))
-                    .foregroundColor(Theme.inkDim)
-            }
-        }
-        .listRowBackground(Theme.surface)
     }
 
     private var sourceSection: some View {
         Section {
             Toggle(isOn: $srcBloomberg) {
-                Text("彭博 Bloomberg").foregroundColor(Theme.ink)
-            }
-            .tint(Theme.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("彭博 Bloomberg").foregroundColor(Theme.ink)
+                    Text("拦 bwbx.io fence 脚本 + 清计量 cookie")
+                        .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+                }
+            }.tint(Theme.orange)
+
             Toggle(isOn: $srcReuters) {
-                Text("路透 Reuters").foregroundColor(Theme.ink)
-            }
-            .tint(Theme.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("路透 Reuters").foregroundColor(Theme.ink)
+                    Text("拦 arc/subs 订阅脚本 + 清 cookie")
+                        .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+                }
+            }.tint(Theme.orange)
         } header: {
             Kicker(text: "信源").padding(.bottom, 2)
-        }
-        .listRowBackground(Theme.surface)
-    }
-
-    private var pushSection: some View {
-        Section {
-            Picker(selection: $apnsEnv) {
-                Text("自动").tag("")
-                Text("sandbox（开发证书）").tag("sandbox")
-                Text("production（发布证书）").tag("production")
-            } label: {
-                Text("APNs 环境").foregroundColor(Theme.ink)
-            }
-            LabeledContent("注册状态") {
-                Text(push.status)
-                    .font(.system(size: 11))
-                    .foregroundColor(Theme.inkDim)
-            }
-            LabeledContent("Token") {
-                Text(push.token.isEmpty ? "—" : String(push.token.prefix(12)) + "…")
-                    .font(.mono(11))
-                    .foregroundColor(Theme.inkDim)
-            }
-            Button {
-                Task { await testPush() }
-            } label: {
-                Text("发送测试推送").foregroundColor(Theme.orange)
-            }
-            .disabled(busy || push.token.isEmpty)
-        } header: {
-            Kicker(text: "推送").padding(.bottom, 2)
         } footer: {
-            Text("自签一般用开发描述文件 → sandbox。若证书不含 Push 权限，App 自动降级为「前台 60s 轮询 + 本地通知」。当前上报：\(Settings.apnsEnv)")
-                .font(.system(size: 10))
-                .foregroundColor(Theme.inkDim)
+            Text("改动后下拉刷新生效。")
+                .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)
     }
 
-    private var quietSection: some View {
+    private var fetchSection: some View {
         Section {
-            Stepper(value: $quietFrom, in: 0...23) {
-                Text("静默开始　\(quietFrom):00").foregroundColor(Theme.ink)
+            Toggle(isOn: $autoFetch) {
+                Text("自动预热正文").foregroundColor(Theme.ink)
+            }.tint(Theme.orange)
+            Button {
+                store.refresh(notify: false)
+                message = "已触发一轮发现"
+            } label: {
+                Text("立即抓一轮").foregroundColor(Theme.orange)
             }
-            Stepper(value: $quietTo, in: 0...23) {
-                Text("静默结束　\(quietTo):00").foregroundColor(Theme.ink)
+            LabeledContent("最近状态") {
+                Text(store.status.isEmpty ? "—" : store.status)
+                    .font(.system(size: 11)).foregroundColor(Theme.inkDim)
+            }
+            LabeledContent("待取正文") {
+                Text("\(store.pendingCount) 条").font(.mono(11)).foregroundColor(Theme.inkDim)
             }
         } header: {
-            Kicker(text: "静默时段").padding(.bottom, 2)
+            Kicker(text: "抓取").padding(.bottom, 2)
         } footer: {
-            Text("静默时段内新稿只入库不推送（服务端判定）。两端设为相同值即关闭。")
-                .font(.system(size: 10))
-                .foregroundColor(Theme.inkDim)
+            Text("发现走 Google News RSS（分钟级）。iOS 后台刷新由系统调度，通常 15–60 分钟一次；App 在前台时每 60 秒一轮。")
+                .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)
     }
 
-    private var actionSection: some View {
+    private var translateSection: some View {
+        Section {
+            TextField("https://api.deepseek.com/chat/completions", text: $llmURL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .keyboardType(.URL)
+                .foregroundColor(Theme.ink)
+            TextField("deepseek-chat", text: $llmModel)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .foregroundColor(Theme.ink)
+            SecureField("LLM API Key（留空则不显示翻译）", text: $llmKey)
+                .foregroundColor(Theme.ink)
+            Toggle(isOn: $translateOnOpen) {
+                Text("打开文章即翻译").foregroundColor(Theme.ink)
+            }.tint(Theme.orange)
+        } header: {
+            Kicker(text: "翻译（可选）").padding(.bottom, 2)
+        } footer: {
+            Text("填 Key 后阅读页底部出现「译成中文」，段落 1:1 对齐；不填也能读原文。")
+                .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+        }
+        .listRowBackground(Theme.surface)
+    }
+
+    private var dataSection: some View {
         Section {
             Button {
-                Task { await save() }
+                busy = true
+                PaywallEngine.shared.wipeAllCookies {
+                    busy = false
+                    message = "已清除 Cookie 与网站数据"
+                }
             } label: {
                 HStack {
-                    Text("保存并重新登记推送").foregroundColor(Theme.bg)
-                    Spacer()
-                    if busy { ProgressView().tint(Theme.bg) }
+                    Text("清除 Cookie / 网站数据").foregroundColor(Theme.orange)
+                    if busy { Spacer(); ProgressView().tint(Theme.orange) }
                 }
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.vertical, 4)
             }
-            .listRowBackground(Theme.ink)
+            .disabled(busy)
+
+            Button {
+                Library.shared.removeAll()
+                store.items = []
+                message = "本地文章已清空"
+            } label: {
+                Text("清空本地文章").foregroundColor(Color(red: 1, green: 0.36, blue: 0.32))
+            }
+        } header: {
+            Kicker(text: "数据").padding(.bottom, 2)
+        } footer: {
+            if !message.isEmpty {
+                Text(message).font(.system(size: 10)).foregroundColor(Theme.inkDim)
+            }
         }
+        .listRowBackground(Theme.surface)
     }
 
-    // MARK: - 动作
-
-    private func save() async {
-        busy = true
-        defer { busy = false }
-        let t = push.token
-        if !t.isEmpty { await push.upload(t) }
-        message = "已保存"
-        try? await Task.sleep(nanoseconds: 400_000_000)
-        dismiss()
-    }
-
-    private func testConnection() async {
-        busy = true
-        message = ""
-        defer { busy = false }
-        struct Stats: Decodable {
-            let articles: Int
-            let devices: Int
+    private var aboutSection: some View {
+        Section {
+            LabeledContent("版本") {
+                Text(Settings.appVersion).font(.mono(11)).foregroundColor(Theme.inkDim)
+            }
+            LabeledContent("拦截规则") {
+                Text("\(rulesCount) / 2 站点").font(.mono(11)).foregroundColor(Theme.inkDim)
+            }
+            LabeledContent("运行方式") {
+                Text("App 内置 · 无服务器").font(.system(size: 11)).foregroundColor(Theme.inkDim)
+            }
+        } header: {
+            Kicker(text: "关于").padding(.bottom, 2)
         }
-        do {
-            let s: Stats = try await APIClient.get("/v1/stats", as: Stats.self)
-            message = "连接正常 · 文章 \(s.articles) · 设备 \(s.devices)"
-        } catch {
-            message = "连接失败：" + error.localizedDescription
-        }
-    }
-
-    private func testPush() async {
-        busy = true
-        defer { busy = false }
-        do {
-            let data = try await APIClient.post(
-                "/v1/testpush?token=\(push.token)&env=\(Settings.apnsEnv)", json: [:])
-            message = String(data: data, encoding: .utf8) ?? "已发送"
-        } catch {
-            message = "推送失败：" + error.localizedDescription
-        }
+        .listRowBackground(Theme.surface)
     }
 }

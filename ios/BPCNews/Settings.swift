@@ -1,34 +1,11 @@
 import Foundation
+import WebKit
 
-/// 全局设置：全部落在 UserDefaults，方便「设置页」直接改、也方便自签重装后保留（同一 Bundle ID 时）
+/// 本地设置（全部存在 UserDefaults，App 自包含，不连自建服务器）
 enum Settings {
-    static let defaultBase = "https://news.example.com"
 
-    static var base: String {
-        let v = UserDefaults.standard.string(forKey: "api_base") ?? defaultBase
-        return v.isEmpty ? defaultBase : v
-    }
-
-    static var token: String {
-        UserDefaults.standard.string(forKey: "api_token") ?? ""
-    }
-
-    /// 自签：开发描述文件 -> sandbox；发布证书 -> production
-    static var apnsEnv: String {
-        if let v = UserDefaults.standard.string(forKey: "apns_env"), !v.isEmpty {
-            return v
-        }
-        #if DEBUG
-        return "sandbox"
-        #else
-        return "production"
-        #endif
-    }
-
-    static var quietFrom: Int { UserDefaults.standard.integer(forKey: "quiet_from") }
-    static var quietTo: Int { UserDefaults.standard.integer(forKey: "quiet_to") }
-
-    static func enabledSites() -> [String] {
+    // 来源
+    static var enabledSites: [String] {
         var out: [String] = []
         if UserDefaults.standard.object(forKey: "src_bloomberg") == nil ||
             UserDefaults.standard.bool(forKey: "src_bloomberg") {
@@ -39,5 +16,28 @@ enum Settings {
             out.append("reuters")
         }
         return out.isEmpty ? ["bloomberg", "reuters"] : out
+    }
+
+    // 抓取
+    static var autoFetch: Bool {
+        UserDefaults.standard.object(forKey: "auto_fetch") == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: "auto_fetch")
+    }
+
+    // 翻译（可选：填了 key 才有「译」按钮）
+    static var llmKey: String { UserDefaults.standard.string(forKey: "llm_key") ?? "" }
+    static var llmModel: String {
+        let v = UserDefaults.standard.string(forKey: "llm_model") ?? ""
+        return v.isEmpty ? "deepseek-chat" : v
+    }
+    static var llmURL: String {
+        let v = UserDefaults.standard.string(forKey: "llm_url") ?? ""
+        return v.isEmpty ? "https://api.deepseek.com/chat/completions" : v
+    }
+    static var translateOnOpen: Bool { UserDefaults.standard.bool(forKey: "translate_on_open") }
+
+    static var appVersion: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0.0"
     }
 }
