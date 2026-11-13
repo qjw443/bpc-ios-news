@@ -370,7 +370,7 @@ final class WebScraper: NSObject, WKNavigationDelegate {
                 for row in arr {
                     guard let u = row["u"] as? String, let t = row["t"] as? String else { continue }
                     if !Sources.isArticleURL(u, site: self.site) { continue }
-                    found.append(Discovery.Discovery.Found(site: self.site, title: t, link: u, date: Date()))
+                    found.append(Discovery.Found(site: self.site, title: t, link: u, date: Date()))
                 }
             }
             self.finishWith(found)
