@@ -1,0 +1,32 @@
+services:
+  app:
+    build: ./server
+    container_name: bpc-news
+    env_file: .env
+    environment:
+      - TZ=Asia/Shanghai
+      - DATA_DIR=/app/data
+      - APNS_P8=/run/secrets/AuthKey.p8
+    volumes:
+      - ./data:/app/data
+      - ./secrets/AuthKey.p8:/run/secrets/AuthKey.p8:ro
+    restart: unless-stopped
+    shm_size: "1gb"          # Playwright/Chromium 必需，否则容易被 OOM 杀掉
+
+  caddy:
+    image: caddy:2.8
+    container_name: bpc-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

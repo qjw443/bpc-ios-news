@@ -1,0 +1,56 @@
+# Bloomberg（源自 BPC 4.4.8.6 sites.js:343 + contentScript_en.js:1684-1950）
+site: bloomberg
+hosts: ["bloomberg.com", "www.bloomberg.com"]
+
+# ---- 反检测：模式顺序 = 先用真 Chrome 指纹，失手再退 Googlebot ----
+modes: ["browser", "bot"]
+profile: "win_desktop"          # Windows 11 + Chrome 150 的自洽指纹
+bot_kind: "googlebot"
+referer: "https://www.google.com/"
+human: true                     # 贝塞尔鼠标 + 分段滚动 + 停顿
+human_intensity: 1.0
+
+# BPC: remove_cookies（反复触发「首次访问」的计量重置）
+clear_cookies: true
+
+# BPC: block_regex: /\.bwbx\.io\/s3\/fence\/(fortress-client|fast-path|plug-client)\//
+block_urls:
+  - '\.bwbx\.io/s3/fence/(fortress-client|fast-path|plug-client)/'
+  - '\.bloomberg\.com/(fence|paywall|regwall|subscription)/'
+  - 'assets\.bwbx\.io/.*/(fortress|fence)[^/]*\.js'
+  - '(datadome|perimeterx|px-cdn|_px)\.(com|net|io)/'
+  - 'captcha-delivery\.com/'
+block_resource_types: ["image", "media", "font", "stylesheet"]
+
+wait_selector: 'script#__NEXT_DATA__'
+
+# BPC: cs_code -> 去 articleBlur 类 / 删 _sheetWrapper_ 订阅浮层 / 清 html-body 类
+inject_css: |
+  div[class*="articleBlur"]{filter:none!important;-webkit-mask-image:none!important;mask-image:none!important}
+  div[class*="_sheetWrapper_"]{display:none!important}
+cleanup_js: |
+  (function(){
+    document.querySelectorAll('div[class*="articleBlur"]').forEach(function(e){
+      e.className = e.className.split(/\s+/).filter(function(c){return c && !/articleBlur/i.test(c);}).join(' ');
+      e.style.filter='none'; e.style.webkitMaskImage='none'; e.style.maskImage='none';
+    });
+    document.querySelectorAll('div[class*="_sheetWrapper_"]').forEach(function(e){
+      var t = e.innerText || '';
+      if (/(unlimited access|claim this offer|subscribe now|already a subscriber)/i.test(t)) e.remove();
+    });
+    [document.documentElement, document.body].forEach(function(e){
+      if (e) { e.removeAttribute('class'); e.style.overflow='auto'; }
+    });
+    document.querySelectorAll('[class*="paywall"],[id*="paywall"],[class*="Paywall"],[class*="Regwall"]')
+      .forEach(function(e){ if (e.offsetHeight > window.innerHeight*0.25) e.remove(); });
+  })();
+
+extract:
+  kind: next_data
+  container: props.pageProps.story
+  title_key: headline
+  summary_key: aiSummary.text
+  audio_key: readingUrl
+  body_path: body.content
+
+archive_fallback: true

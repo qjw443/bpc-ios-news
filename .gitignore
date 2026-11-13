@@ -1,0 +1,14 @@
+.env
+secrets/
+data/
+server/data/
+*.p8
+*.p12
+*.mobileprovision
+*.ipa
+dist/
+ios/build/
+ios/Payload/
+__pycache__/
+*.db
+*.pyc

@@ -1,0 +1,43 @@
+# Reuters（源自 BPC 4.4.8.6 sites.js:2572-2576）
+site: reuters
+hosts: ["reuters.com", "www.reuters.com"]
+
+# Reuters 走 Arc + 边缘反爬（非浏览器直接 401 JS 挑战），所以只用真浏览器指纹，
+# 并且保留 cookie（温启动的老访客比每次全新的裸会话可信得多）
+modes: ["browser"]
+profile: "mac_desktop"
+referer: "https://www.google.com/"
+human: true
+human_intensity: 1.2
+clear_cookies: false
+
+# BPC: block_regex: /\.reuters\.com\/arc\/subs\/p\.min\.js/  -> Arc XP 订阅墙脚本
+block_urls:
+  - '\.reuters\.com/arc/subs/p\.min\.js'
+  - '\.reuters\.com/arc/outboundfeeds/.*subs'
+  - 'consent\.reuters\.com'
+  - '(datadome|perimeterx|px-cdn|_px)\.(com|net|io)/'
+  - 'captcha-delivery\.com/'
+block_resource_types: ["media", "font"]
+
+wait_selector: 'div[data-testid^="paragraph-"], article'
+
+inject_css: |
+  div[data-testid="ResponsiveAdSlot"], div[data-testid="Dianomi"]{display:none!important}
+  [class*="paywall"],[data-testid*="paywall"]{display:none!important}
+cleanup_js: |
+  (function(){
+    document.querySelectorAll('div[data-testid="ResponsiveAdSlot"],div[data-testid="Dianomi"]').forEach(function(e){e.remove();});
+    document.querySelectorAll('[class*="paywall"],[data-testid*="paywall"],[class*="Regwall"]').forEach(function(e){e.remove();});
+    document.querySelectorAll('body > div[role="dialog"]').forEach(function(e){e.remove();});
+    document.body.style.overflow='auto';
+    document.documentElement.style.overflow='auto';
+  })();
+
+extract:
+  kind: dom
+  article_selector: 'div[data-testid="Article"], article, main'
+  paragraph_selector: 'div[data-testid^="paragraph-"], div[data-testid="paragraph"]'
+  title_selector: 'h1'
+
+archive_fallback: true

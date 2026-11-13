@@ -1,0 +1,11 @@
+{
+    # 换成你自己的域名（必须能自动签发 Let's Encrypt 证书，App 的 ATS 只信公共 CA）
+    news.example.com {
+        encode gzip zstd
+        reverse_proxy app:8000
+        header {
+            Strict-Transport-Security "max-age=31536000"
+            -Server
+        }
+    }
+}

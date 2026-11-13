@@ -1,0 +1,83 @@
+name: build-unsigned-ipa
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-unsigned.yml"
+
+jobs:
+  build:
+    name: Build unsigned IPA (no signing)
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Prepare Xcode project
+        working-directory: ios
+        run: |
+          if [ -d BPCNews.xcodeproj ]; then
+            echo "== using checked-in BPCNews.xcodeproj =="
+            python3 tools/check_xcodeproj.py
+          else
+            echo "== generating project with XcodeGen =="
+            brew install xcodegen
+            xcodegen generate
+          fi
+          ls -la
+          ls -la BPCNews.xcodeproj
+
+      - name: Build (code signing disabled)
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project BPCNews.xcodeproj \
+            -scheme BPCNews \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS="" \
+            build 2>&1 | tail -80
+          test -d build/Build/Products/Release-iphoneos/BPCNews.app
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          APP="build/Build/Products/Release-iphoneos/BPCNews.app"
+          test -d "$APP" || { echo "app not found"; find build -name "*.app" -maxdepth 6; exit 1; }
+          rm -rf Payload BPCNews-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          /usr/bin/zip -qry BPCNews-unsigned.ipa Payload
+          echo "---- artifacts ----"
+          ls -lh BPCNews-unsigned.ipa
+          echo "---- app info ----"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP/Info.plist"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BPCNews-unsigned-ipa
+          path: ios/BPCNews-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
