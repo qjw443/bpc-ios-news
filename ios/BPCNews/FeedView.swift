@@ -29,7 +29,7 @@ struct FeedView: View {
     @State private var shareItems: [Any] = []
     @State private var showShare = false
 
-    // 列表标题中文化
+    // 标题中文化
     @State private var titleIds: [String] = []
     @State private var titleTexts: [String] = []
     @State private var titleResults: [String] = []
@@ -37,7 +37,10 @@ struct FeedView: View {
     @State private var titleError = ""
     @State private var titleNonce = 0
     @State private var activeNonce = -1
-    @State private var titleTried: Set<String> = []   // 已尝试过的条目，避免翻译失败后死循环
+    @State private var titleTried: Set<String> = []
+
+    // 可见优先翻译
+    @State private var visibleIds: Set<String> = []
 
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
     @Environment(\.scenePhase) private var scenePhase
@@ -50,61 +53,66 @@ struct FeedView: View {
                            nonce: titleNonce) {
             content
         }
-        .onChange(of: titleResults) { new in
-            applyTitles(new)
-        }
+        .onChange(of: titleResults) { new in applyTitles(new) }
     }
 
     private var content: some View {
         NavigationStack(path: $path) {
-            ZStack {
-                Theme.bg.ignoresSafeArea()
-                ScrollView {
-                    LazyVStack(spacing: 0, pinnedViews: []) {
-                        masthead
-                        quickBar
-                        if !store.lastError.isEmpty { errorStrip }
-                        if store.loading && store.items.isEmpty {
-                            skeleton
-                        } else if filtered.isEmpty {
-                            emptyState
-                        } else {
-                            ForEach(filtered) { item in
-                                NavigationLink(value: item.id) {
-                                    FeedRow(item: item)
+            ScrollViewReader { proxy in
+                ZStack(alignment: .bottomTrailing) {
+                    Theme.bg.ignoresSafeArea()
+
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            masthead.id("top")
+                            quickBar
+                            if !store.lastError.isEmpty { errorStrip }
+                            if store.loading && store.items.isEmpty {
+                                skeleton
+                            } else if filtered.isEmpty {
+                                emptyState
+                            } else {
+                                ForEach(filtered) { item in
+                                    NavigationLink(value: item.id) {
+                                        FeedRow(item: item)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .onAppear {
+                                        visibleIds.insert(item.id)
+                                        translateSoon()
+                                    }
+                                    .contextMenu {
+                                        Button {
+                                            store.toggleSaved(item.id)
+                                            haptic(.light)
+                                        } label: {
+                                            Label(item.saved ? "取消收藏" : "收藏",
+                                                  systemImage: item.saved ? "bookmark.slash" : "bookmark")
+                                        }
+                                        Button {
+                                            store.markRead(item.id)
+                                            haptic(.light)
+                                        } label: {
+                                            Label(item.read ? "标记未读" : "标记已读",
+                                                  systemImage: item.read ? "circle" : "checkmark.circle")
+                                        }
+                                        Button { share(item) } label: {
+                                            Label("分享", systemImage: "square.and.arrow.up")
+                                        }
+                                    }
+                                    Hairline().padding(.leading, 18)
                                 }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button {
-                                        Library.shared.toggleSaved(item.id)
-                                        store.items = Library.shared.items
-                                        haptic(.light)
-                                    } label: {
-                                        Label(item.saved ? "取消收藏" : "收藏",
-                                              systemImage: item.saved ? "bookmark.slash" : "bookmark")
-                                    }
-                                    Button {
-                                        Library.shared.markRead(item.id)
-                                        store.items = Library.shared.items
-                                        haptic(.light)
-                                    } label: {
-                                        Label(item.read ? "标记未读" : "标记已读",
-                                              systemImage: item.read ? "circle" : "checkmark.circle")
-                                    }
-                                    Button {
-                                        share(item)
-                                    } label: {
-                                        Label("分享", systemImage: "square.and.arrow.up")
-                                    }
-                                }
-                                Hairline().padding(.leading, 18)
                             }
+                            colophon
                         }
-                        colophon
+                        .padding(.bottom, 90)
                     }
-                    .padding(.bottom, 28)
+                    .refreshable { await pull() }
+
+                    scrollTopButton(proxy)
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 26)
                 }
-                .refreshable { await pull() }
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: String.self) { ReaderView(itemId: $0) }
@@ -142,7 +150,27 @@ struct FeedView: View {
         .preferredColorScheme(.dark)
     }
 
-    // MARK: - 顶部：速度条
+    // MARK: - 一键到顶（苹果玻璃质感）
+
+    private func scrollTopButton(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            haptic(.light)
+            withAnimation(.easeOut(duration: 0.34)) {
+                proxy.scrollTo("top", anchor: .top)
+            }
+        } label: {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(Theme.ink)
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.38), radius: 10, y: 4)
+        }
+        .accessibilityLabel("回到顶部")
+    }
+
+    // MARK: - 顶部速度条
 
     private var masthead: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -156,9 +184,7 @@ struct FeedView: View {
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 6) {
-                    Button {
-                        showSearch.toggle()
-                    } label: {
+                    Button { showSearch.toggle() } label: {
                         Image(systemName: showSearch ? "xmark" : "magnifyingglass")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(showSearch ? Theme.orange : Theme.ink)
@@ -181,9 +207,7 @@ struct FeedView: View {
                                         ? .linear(duration: 0.9).repeatForever(autoreverses: false)
                                         : .default, value: store.loading)
                     }
-                    Button {
-                        showSettings = true
-                    } label: {
+                    Button { showSettings = true } label: {
                         Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(Theme.ink)
@@ -194,14 +218,13 @@ struct FeedView: View {
                 }
             }
 
-            // 速度条：延迟 + 本轮耗时 + 条数
             HStack(spacing: 6) {
                 Circle()
                     .fill(store.lastError.isEmpty ? Theme.orange : Color.red)
                     .frame(width: 5, height: 5)
                 Kicker(text: store.latencyText, size: 8.5)
                 Spacer()
-                Kicker(text: "\(store.items.count) 条 · 未读 \(Library.shared.unreadCount)", size: 8.5)
+                Kicker(text: "\(store.items.count) 条 · 未读 \(unreadCount)", size: 8.5)
             }
         }
         .padding(.horizontal, 18)
@@ -209,7 +232,9 @@ struct FeedView: View {
         .padding(.bottom, 12)
     }
 
-    // MARK: - 快捷栏：搜索 + 筛选
+    private var unreadCount: Int { store.items.filter { !$0.read }.count }
+
+    // MARK: - 快捷栏
 
     private var quickBar: some View {
         VStack(spacing: 8) {
@@ -271,7 +296,7 @@ struct FeedView: View {
     private func count(_ f: FeedFilter) -> Int {
         switch f {
         case .all: return store.items.count
-        case .unread: return store.items.filter { !$0.read }.count
+        case .unread: return unreadCount
         case .bloomberg: return store.items.filter { $0.site == .bloomberg }.count
         case .reuters: return store.items.filter { $0.site == .reuters }.count
         case .saved: return store.items.filter { $0.saved }.count
@@ -364,7 +389,7 @@ struct FeedView: View {
     private var emptyHint: String {
         if !query.isEmpty { return "换个关键词，或点右上角 × 清空搜索" }
         if filter == .unread { return "下拉或等自动刷新，新稿会自动出现在最上面" }
-        if filter == .saved { return "左滑任意一条，点「收藏」即可加入" }
+        if filter == .saved { return "长按任意一条，点「收藏」即可加入" }
         return "检查网络或 VPN；也可以在设置里确认两个源的健康度"
     }
 
@@ -383,8 +408,7 @@ struct FeedView: View {
     private var colophon: some View {
         VStack(spacing: 6) {
             Hairline().padding(.top, 10)
-            Kicker(text: "本机直连 · 无第三方服务器 · \(TimeFmt.fullText(store.lastCheck)) 更新",
-                   size: 8)
+            Kicker(text: "本机直连 · 无第三方服务器 · \(TimeFmt.fullText(store.lastCheck)) 更新", size: 8)
                 .padding(.top, 10)
             Kicker(text: "点右上角放大镜搜索；长按任意一条可收藏、标记已读或分享", size: 8)
         }
@@ -423,17 +447,37 @@ struct FeedView: View {
 
     // MARK: - 标题中文化
 
+    private func translateSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { translateTitles() }
+    }
+
+    /// 策略：可见优先 → 其余按到达顺序；系统翻译不可用时用词典兜底，保证不出现整行英文
     private func translateTitles() {
-        guard Settings.zhMode == "sys" else { return }
+        if Settings.zhMode == "sys" {
+            systemBatch()
+        } else {
+            dictFill()
+        }
+    }
+
+    private func systemBatch() {
         guard !titleBusy else { return }
-        let todo = Array(store.items
-            .filter { $0.titleZh.isEmpty && !titleTried.contains($0.id) }
-            .prefix(25))
-        guard !todo.isEmpty else { return }
-        for it in todo { titleTried.insert(it.id) }
-        if titleTried.count > 800 { titleTried = Set(titleTried.suffix(400)) }
-        titleIds = todo.map { $0.id }
-        titleTexts = todo.map { $0.title }
+        let pool = store.items.filter { $0.titleZh.isEmpty && !titleTried.contains($0.id) }
+        guard !pool.isEmpty else {
+            dictFill()
+            return
+        }
+        // 可见的排前面
+        let visibleFirst = pool.filter { visibleIds.contains($0.id) }
+        let rest = pool.filter { !visibleIds.contains($0.id) }
+        let batch = Array((visibleFirst + rest).prefix(40))
+        guard !batch.isEmpty else { return }
+
+        for it in batch { titleTried.insert(it.id) }
+        if titleTried.count > 1200 { titleTried = Set(titleTried.suffix(600)) }
+
+        titleIds = batch.map { $0.id }
+        titleTexts = batch.map { $0.title }
         titleResults = []
         titleBusy = true
         titleNonce += 1
@@ -456,10 +500,21 @@ struct FeedView: View {
         titleResults = []
         titleBusy = false
         store.notifyPending()
-        // 连续补翻：还有英文标题就继续下一批（最多 3 批，避免长时间占用）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            translateTitles()
+        // 连续补翻：立刻排下一批（可见优先），直到没有待译条目
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { translateTitles() }
+    }
+
+    /// 词典兜底：把仍为英文的标题填上中文（本地、零延迟）
+    private func dictFill() {
+        var changed = false
+        for it in store.items where it.titleZh.isEmpty {
+            let zh = Dict.translate(it.title)
+            if !zh.isEmpty, zh != it.title {
+                Library.shared.setTitleZh(it.id, zh)
+                changed = true
+            }
         }
+        if changed { store.items = Library.shared.items }
     }
 }
 

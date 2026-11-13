@@ -60,7 +60,8 @@ final class Discovery: NSObject {
 
         for site in Site.allCases {
             for ep in Sources.endpoints(for: site) {
-                if !full && ep.kind == .sitemap { continue }   // 快轮次跳过 sitemap（300KB+）
+                // 快轮次只跳过「彭博大 sitemap」（335KB）；路透只有 sitemap 通道，必须每轮都试
+                if !full && site == .bloomberg && ep.kind == .sitemap { continue }
                 group.enter()
                 fetch(ep) { found, note in
                     lock.lock()
@@ -77,10 +78,12 @@ final class Discovery: NSObject {
 
         group.notify(queue: .main) {
             var needWeb: [Site] = []
-            if full {
+            let canScrape = full || Date().timeIntervalSince(self.lastWebScrape) > 90
+            if canScrape {
                 for site in Site.allCases where (perSite[site.rawValue] ?? 0) < 5 {
                     needWeb.append(site)
                 }
+                if !needWeb.isEmpty { self.lastWebScrape = Date() }
             }
             guard !needWeb.isEmpty else {
                 completion(self.dedupe(collected))
@@ -204,6 +207,7 @@ final class Discovery: NSObject {
 
     private var scrapers: [WebScraper] = []
     private var relayKeepAlive: [BrowserFetcher] = []
+    private var lastWebScrape = Date.distantPast
 
     /// HTTP 被 401/403 挡住时的浏览器中继：用 WKWebView 执行挑战 JS 后再取同一份资源
     private func browserRelay(_ ep: Sources.Endpoint,

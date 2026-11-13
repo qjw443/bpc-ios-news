@@ -12,7 +12,7 @@ struct SettingsView: View {
     @AppStorage("fresh_hours") private var freshHours: Int = 24
     @AppStorage("auto_monitor") private var autoMonitor: Bool = true
     @AppStorage("poll_seconds") private var pollSeconds: Int = 30
-    @AppStorage("keep_alive") private var keepAlive: Bool = false
+    @AppStorage("keep_alive") private var keepAlive: Bool = true
     @AppStorage("translate_on_open") private var translateOnOpen: Bool = false
     @AppStorage("zh_mode") private var zhMode: String = "dict"
     @AppStorage("llm_url") private var llmURL: String = "https://api.deepseek.com/chat/completions"

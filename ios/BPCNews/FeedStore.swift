@@ -156,9 +156,11 @@ final class FeedStore: ObservableObject {
                                     ts: Int(date.timeIntervalSince1970))
                 item.summary = f.summary
                 item.author = f.author
-                if Settings.zhMode == "dict" {
-                    item.titleZh = Dict.translate(title)
-                    if !f.summary.isEmpty { item.summary = Dict.translate(f.summary) }
+                // 词典基线：先给一个中文（哪怕不完美），系统翻译随后覆盖更高质量的结果
+                let baseline = Dict.translate(title)
+                if !baseline.isEmpty { item.titleZh = baseline }
+                if Settings.zhMode == "dict", !f.summary.isEmpty {
+                    item.summary = Dict.translate(f.summary)
                 }
                 mapped.append(item)
             }
@@ -187,6 +189,8 @@ final class FeedStore: ObservableObject {
                 UserDefaults.standard.set(self.lastCheck, forKey: "last_check_ts")
                 UserDefaults.standard.set(self.lastCheck, forKey: self.lastCheckKey)
 
+                (UIApplication.shared.delegate as? AppDelegate)?.scheduleBackground()
+
                 // 推送：前台等标题翻完再推（FeedView 调 notifyPending），后台这里直接推
                 let pushCut = nowTs - Settings.pushWindowMinutes * 60
                 let pushable = fresh.filter { $0.ts >= pushCut }
@@ -200,6 +204,18 @@ final class FeedStore: ObservableObject {
             }
             completion?()
         }
+    }
+
+    // MARK: - 已读 / 收藏（统一入口：库与界面同时更新）
+
+    func markRead(_ id: String) {
+        Library.shared.markRead(id)
+        items = Library.shared.items
+    }
+
+    func toggleSaved(_ id: String) {
+        Library.shared.toggleSaved(id)
+        items = Library.shared.items
     }
 
     // MARK: - 抓正文（App 内绕过付费墙）

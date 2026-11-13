@@ -10,6 +10,28 @@ import AVFoundation
 enum SilentKeeper {
 
     private static var player: AVAudioPlayer?
+    private static var observing = false
+
+    /// 来电/其他 App 抢走音频会话后自动恢复，避免后台静默被杀
+    private static func observeInterruptions() {
+        guard !observing else { return }
+        observing = true
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil, queue: .main) { note in
+                guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+                if type == .ended {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        if Settings.keepAlive { restart() }
+                    }
+                }
+            }
+    }
+
+    private static func restart() {
+        player?.play()
+    }
 
     static func start() {
         guard Settings.keepAlive else { return }
@@ -24,6 +46,7 @@ enum SilentKeeper {
                 player?.prepareToPlay()
             }
             player?.play()
+            observeInterruptions()
         } catch {
             print("[keepalive] start failed: \(error.localizedDescription)")
         }

@@ -83,7 +83,7 @@ struct ReaderView: View {
                     }
                     if let it = Library.shared.item(for: itemId) {
                         Button {
-                            Library.shared.toggleSaved(itemId)
+                            FeedStore.shared.toggleSaved(itemId)
                             hapticTick()
                         } label: {
                             Label(it.saved ? "取消收藏" : "收藏", systemImage: it.saved ? "bookmark.slash" : "bookmark")
@@ -398,7 +398,7 @@ struct ReaderView: View {
 
     private func load() {
         elapsed = 0
-        Library.shared.markRead(itemId)
+        FeedStore.shared.markRead(itemId)
         if let cached = Library.shared.article(for: itemId), cached.blocks.count >= 3 {
             article = withChinese(cached)
             return

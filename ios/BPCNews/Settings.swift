@@ -39,7 +39,11 @@ enum Settings {
         return v < 15 ? 30 : v
     }
     /// 后台保活（播放静音音频换取后台运行时间，默认关闭）
-    static var keepAlive: Bool { UserDefaults.standard.bool(forKey: "keep_alive") }
+    static var keepAlive: Bool {
+        UserDefaults.standard.object(forKey: "keep_alive") == nil
+            ? true                                   // 默认开启：后台可持续抓取
+            : UserDefaults.standard.bool(forKey: "keep_alive")
+    }
 
     static var autoFetch: Bool {
         UserDefaults.standard.object(forKey: "auto_fetch") == nil
