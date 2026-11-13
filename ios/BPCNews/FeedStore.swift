@@ -154,8 +154,11 @@ final class FeedStore: ObservableObject {
                                     title: title,
                                     url: f.link,
                                     ts: Int(date.timeIntervalSince1970))
+                item.summary = f.summary
+                item.author = f.author
                 if Settings.zhMode == "dict" {
                     item.titleZh = Dict.translate(title)
+                    if !f.summary.isEmpty { item.summary = Dict.translate(f.summary) }
                 }
                 mapped.append(item)
             }
@@ -274,15 +277,26 @@ final class FeedStore: ObservableObject {
         func deliver(_ zhTitle: String) {
             let content = UNMutableNotificationContent()
             if fresh.count == 1 {
-                content.title = zhTitle.isEmpty ? Self.zhFallback(first) : zhTitle
-                content.body = first.site.label + " · 刚刚"
+                let t = zhTitle.isEmpty ? Self.zhFallback(first) : zhTitle
+                content.title = "【\(first.site.label)】" + t
+                var body = first.summary
+                if body.isEmpty { body = first.brief.first ?? "" }
+                if body.isEmpty { body = first.title }
+                if let name = first.author.isEmpty ? nil : first.author {
+                    body = name + "：" + body
+                }
+                content.body = body.count > 96 ? String(body.prefix(96)) + "…" : body
+                content.subtitle = TimeFmt.feedText(first.ts) + " 北京时间"
             } else {
-                content.title = "财经速递 · \(fresh.count) 条新消息"
-                content.body = fresh.prefix(2)
+                content.title = "彭博与路透新闻 · \(fresh.count) 条新稿"
+                content.body = fresh.prefix(3)
                     .map { $0.titleZh.isEmpty ? Self.zhFallback($0) : $0.titleZh }
-                    .joined(separator: "／")
+                    .joined(separator: "；")
+                content.subtitle = "最新 " + TimeFmt.feedText(first.ts) + " 北京时间"
             }
             content.sound = .default
+            content.threadIdentifier = first.site.rawValue
+            content.categoryIdentifier = "BPC_NEWS"
             content.userInfo = ["itemId": first.id]
             let req = UNNotificationRequest(identifier: UUID().uuidString,
                                             content: content, trigger: nil)

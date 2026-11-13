@@ -26,6 +26,10 @@ struct FeedItem: Codable, Identifiable, Equatable {
     var brief: [String] = []
     var fetched: Bool = false // 正文是否已抓到本地
     var arrivedTs: Int = 0        // 本机首次发现时间（用于把最新到达的排在最前）
+    var summary: String = ""      // RSS 摘要（列表副标题 / 通知正文）
+    var author: String = ""       // 作者
+    var read: Bool = false        // 已读
+    var saved: Bool = false       // 收藏
 }
 
 struct Block: Codable, Equatable {
@@ -109,7 +113,7 @@ final class Library {
     /// 去重两条线：① id（URL+标题）② 规范化 URL（同一篇从 sitemap 与 RSS 各来一次时）
     /// 新条目会写入 arrivedTs（本机首次看到的时间），列表按它排在前面。
     @discardableResult
-    func merge(_ found: [FeedItem], limit: Int = 300) -> [FeedItem] {
+    func merge(_ found: [FeedItem], limit: Int = 500) -> [FeedItem] {
         var seenIds = Set(items.map { $0.id })
         var seenURLs = Set(items.map { Self.normURL($0.url) })
         var fresh: [FeedItem] = []
@@ -177,6 +181,23 @@ final class Library {
         items[i].url = url
         persistFeed()
     }
+
+    /// 标记已读
+    func markRead(_ id: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }), !items[i].read else { return }
+        items[i].read = true
+        persistFeed()
+    }
+
+    /// 收藏 / 取消收藏
+    func toggleSaved(_ id: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].saved.toggle()
+        persistFeed()
+    }
+
+    var unreadCount: Int { items.filter { !$0.read }.count }
+    var savedCount: Int { items.filter { $0.saved }.count }
 
     /// 标题中文化（供列表页翻译回填）
     func setTitleZh(_ id: String, _ zh: String) {

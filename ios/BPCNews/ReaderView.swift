@@ -382,6 +382,7 @@ struct ReaderView: View {
 
     private func load() {
         elapsed = 0
+        Library.shared.markRead(itemId)
         if let cached = Library.shared.article(for: itemId), cached.blocks.count >= 3 {
             article = withChinese(cached)
             return

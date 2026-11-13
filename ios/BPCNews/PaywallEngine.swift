@@ -246,11 +246,13 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
                 return clean.isEmpty && b.type != "hr" ? nil : Block(type: b.type, text: clean, src: nil)
             }
 
-            if blocks.count < 3 && !self.archiveTried {
+            // 用「过滤前」的原始段数判定是否抓到了正文（纯文本模式下图片被丢弃，不能用过滤后的数量）
+            let rawCount = (raw?.blocks ?? []).filter { $0.type != "img" }.count
+            if rawCount < 3 && !self.archiveTried {
                 self.archiveFallback()
                 return
             }
-            if blocks.count < 3 {
+            if rawCount < 3 {
                 self.finish(.failure(FetchError.emptyBlocks(blocks.count)))
                 return
             }

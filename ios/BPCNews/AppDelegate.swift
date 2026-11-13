@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                             using: nil) { task in
             self.handleProcessing(task)
         }
+        registerNotificationCategory()
         requestNotificationPermission()
         FeedStore.shared.bootstrap()
         FeedStore.shared.startMonitoring()
@@ -45,6 +46,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         SilentKeeper.stop()
         FeedStore.shared.startMonitoring()
         FeedStore.shared.refresh()
+    }
+
+    /// 通知上的快捷动作：打开 / 收藏
+    private func registerNotificationCategory() {
+        let open = UNNotificationAction(identifier: "BPC_OPEN", title: "打开", options: [.foreground])
+        let save = UNNotificationAction(identifier: "BPC_SAVE", title: "收藏", options: [])
+        let cat = UNNotificationCategory(identifier: "BPC_NEWS",
+                                         actions: [open, save],
+                                         intentIdentifiers: [],
+                                         options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat])
     }
 
     private func requestNotificationPermission() {
@@ -127,6 +139,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
+        if response.actionIdentifier == "BPC_SAVE",
+           let itemId = info["itemId"] as? String, !itemId.isEmpty {
+            Library.shared.toggleSaved(itemId)
+            completionHandler()
+            return
+        }
         if let itemId = info["itemId"] as? String, !itemId.isEmpty {
             DeepLink.shared.pendingItemId = itemId
             DispatchQueue.main.async {

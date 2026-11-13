@@ -15,6 +15,8 @@ final class Discovery: NSObject {
         let title: String
         let link: String
         let date: Date?
+        var summary: String = ""   // RSS <description>：一句话摘要（已去标签）
+        var author: String = ""    // RSS <dc:creator>：作者
     }
 
     struct SourceStatus: Identifiable {
@@ -264,6 +266,8 @@ final class FeedParser: NSObject, XMLParserDelegate {
     private var rssTitle = ""
     private var rssLink = ""
     private var rssDate = ""
+    private var rssSummary = ""
+    private var rssAuthor = ""
 
     // sitemap 状态
     private var inURL = false
@@ -286,7 +290,7 @@ final class FeedParser: NSObject, XMLParserDelegate {
         buf = ""
         if name == "item" {
             inItem = true
-            rssTitle = ""; rssLink = ""; rssDate = ""
+            rssTitle = ""; rssLink = ""; rssDate = ""; rssSummary = ""; rssAuthor = ""
         } else if name == "url" {
             inURL = true
             smLoc = ""; smLastmod = ""; smDate = ""; smTitle = ""
@@ -318,12 +322,17 @@ final class FeedParser: NSObject, XMLParserDelegate {
             case "title": rssTitle = text
             case "link": rssLink = text
             case "pubDate", "published", "updated": rssDate = text
+            case "description", "summary": rssSummary = text
+            case "dc:creator", "creator", "author": rssAuthor = text
             case "item":
                 inItem = false
                 if rssLink.count > 10, rssTitle.count > 8 {
-                    items.append(Discovery.Found(site: site, title: Self.decode(rssTitle),
-                                       link: rssLink,
-                                       date: Self.parseDate(rssDate)))
+                    items.append(Discovery.Found(site: site,
+                                                 title: Self.decode(rssTitle),
+                                                 link: rssLink,
+                                                 date: Self.parseDate(rssDate),
+                                                 summary: Self.plain(rssSummary),
+                                                 author: Self.plain(rssAuthor)))
                 }
             default: break
             }
@@ -368,6 +377,16 @@ final class FeedParser: NSObject, XMLParserDelegate {
                    "&#39;": "'", "&apos;": "'", "&nbsp;": " "]
         for (k, v) in map { t = t.replacingOccurrences(of: k, with: v) }
         return t.trimmed
+    }
+
+    /// 把 RSS 里的 HTML 片段转成纯文本摘要
+    static func plain(_ s: String) -> String {
+        guard !s.isEmpty else { return "" }
+        var t = s.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        t = decode(t)
+        t = t.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        t = t.trimmed
+        return t.count > 300 ? String(t.prefix(300)) : t
     }
 
     static func titleFromURL(_ url: String) -> String {
