@@ -27,6 +27,18 @@ enum Settings {
     /// 推送只看多少分钟内的稿子（避免一次推一堆历史）
     static let pushWindowMinutes = 120
 
+    /// 自动监控：前台定时 + 回到前台即刷 + 网络恢复即刷
+    static var autoMonitor: Bool {
+        UserDefaults.standard.object(forKey: "auto_monitor") == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: "auto_monitor")
+    }
+    /// 前台轮询间隔（秒）
+    static var pollSeconds: Int {
+        let v = UserDefaults.standard.integer(forKey: "poll_seconds")
+        return v < 30 ? 60 : v
+    }
+
     static var autoFetch: Bool {
         UserDefaults.standard.object(forKey: "auto_fetch") == nil
             ? true

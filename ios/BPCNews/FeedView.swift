@@ -13,8 +13,8 @@ struct FeedView: View {
     @State private var titleError = ""
     @State private var titleNonce = 0
 
-    private let ticker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         SystemTranslateBox(texts: titleTexts,
@@ -54,9 +54,12 @@ struct FeedView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: String.self) { ReaderView(itemId: $0) }
             .sheet(isPresented: $showSettings) { SettingsView() }
-            .onReceive(ticker) { _ in
-                store.refresh()
-                translateTitles()
+            .onChange(of: scenePhase) { phase in
+                if phase == .active {
+                    store.startMonitoring()
+                    store.refresh()
+                    translateTitles()
+                }
             }
             .onReceive(openItem) { note in
                 if let id = note.object as? String {
@@ -69,6 +72,7 @@ struct FeedView: View {
                     path = [id]
                     DeepLink.shared.pendingItemId = nil
                 }
+                store.startMonitoring()
                 if store.items.isEmpty { store.refresh() }
                 translateTitles()
             }

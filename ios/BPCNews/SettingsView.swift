@@ -9,6 +9,8 @@ struct SettingsView: View {
     @AppStorage("src_reuters") private var srcReuters: Bool = true
     @AppStorage("auto_fetch") private var autoFetch: Bool = true
     @AppStorage("fresh_hours") private var freshHours: Int = 24
+    @AppStorage("auto_monitor") private var autoMonitor: Bool = true
+    @AppStorage("poll_seconds") private var pollSeconds: Int = 60
     @AppStorage("translate_on_open") private var translateOnOpen: Bool = false
     @AppStorage("zh_mode") private var zhMode: String = "dict"
     @AppStorage("llm_url") private var llmURL: String = "https://api.deepseek.com/chat/completions"
@@ -112,6 +114,24 @@ struct SettingsView: View {
 
     private var fetchSection: some View {
         Section {
+            Toggle(isOn: $autoMonitor) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("自动监控").foregroundColor(Theme.ink)
+                    Text("前台定时轮询 · 回前台即刷 · 网络恢复即刷")
+                        .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+                }
+            }.tint(Theme.orange)
+            Picker(selection: $pollSeconds) {
+                Text("30 秒").tag(30)
+                Text("60 秒").tag(60)
+                Text("2 分钟").tag(120)
+                Text("5 分钟").tag(300)
+            } label: {
+                Text("轮询间隔").foregroundColor(Theme.ink)
+            }
+            LabeledContent("上次检查") {
+                Text(store.lastCheckText).font(.mono(11)).foregroundColor(Theme.inkDim)
+            }
             Button {
                 store.refresh(notify: false)
                 message = "已触发一轮发现"

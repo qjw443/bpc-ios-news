@@ -121,6 +121,11 @@ final class Discovery: NSObject {
                     self.fetch(ep, attempt: 1, completion: completion)
                     return
                 }
+                // 仍是 401/403：交给浏览器中继（WS 挑战只能靠执行 JS 通过）
+                if [401, 403].contains(code) {
+                    self.browserRelay(ep, completion: completion)
+                    return
+                }
                 let note = err?.localizedDescription ?? "HTTP \(code)"
                 completion([], note)
                 return
@@ -192,6 +197,30 @@ final class Discovery: NSObject {
     // MARK: - 网页通道
 
     private var scrapers: [WebScraper] = []
+    private var relayKeepAlive: [BrowserFetcher] = []
+
+    /// HTTP 被 401/403 挡住时的浏览器中继：用 WKWebView 执行挑战 JS 后再取同一份资源
+    private func browserRelay(_ ep: Sources.Endpoint,
+                              completion: @escaping ([Discovery.Found], String) -> Void) {
+        let fetcher = BrowserFetcher()
+        relayKeepAlive.append(fetcher)
+        fetcher.fetchText(urlString: ep.url, site: ep.site) { [weak self] text in
+            guard let self = self else { return }
+            self.relayKeepAlive.removeAll { $0 === fetcher }
+            guard !text.isEmpty, let d = text.data(using: .utf8) else {
+                completion([], "401/403 · 中继未通过")
+                return
+            }
+            let (items, children) = self.parse(d, site: ep.site)
+            if items.isEmpty && !children.isEmpty {
+                self.fetchChildren(children, site: ep.site, depth: 0) { more in
+                    completion(more, more.isEmpty ? "中继·子图无文章" : "中继 \(more.count) 条")
+                }
+                return
+            }
+            completion(items, items.isEmpty ? "中继解析 0 条" : "中继 \(items.count) 条")
+        }
+    }
 
     private func scrapeWeb(_ sites: [Site], completion: @escaping ([Discovery.Found]) -> Void) {
         var results: [Discovery.Found] = []

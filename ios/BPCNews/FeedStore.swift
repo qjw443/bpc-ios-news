@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 import UIKit
+import Network
 
 /// 编排层：发现 → 入库 → 抓正文（App 内 WKWebView 绕过付费墙）→ 本地通知
 final class FeedStore: ObservableObject {
@@ -16,6 +17,56 @@ final class FeedStore: ObservableObject {
     private var fetchers: [String: ArticleFetcher] = [:]
     private var busy = false
     private let lastCheckKey = "last_discovery_ts"
+
+    // 自动监控
+    private var timer: Timer?
+    private var pathMonitor: NWPathMonitor?      // NWPathMonitor 取消后不可复用，每次重建
+    private var monitorStarted = false
+    @Published var lastCheck: Int = UserDefaults.standard.integer(forKey: "last_check_ts")
+
+    // MARK: 自动监控（不需要手动下拉）
+
+    /// 前台定时轮询 + 网络恢复立即刷 + 回到前台立即刷
+    func startMonitoring() {
+        guard Settings.autoMonitor else { return }
+        if timer == nil {
+            let t = Timer(timeInterval: TimeInterval(Settings.pollSeconds), repeats: true) {
+                [weak self] _ in
+                self?.refresh()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            timer = t
+        }
+        if !monitorStarted {
+            monitorStarted = true
+            let m = NWPathMonitor()
+            m.pathUpdateHandler = { [weak self] path in
+                guard path.status == .satisfied else { return }
+                DispatchQueue.main.async { self?.refresh() }
+            }
+            m.start(queue: DispatchQueue(label: "bpc.net.monitor"))
+            pathMonitor = m
+        }
+    }
+
+    func stopMonitoring() {
+        timer?.invalidate()
+        timer = nil
+        if monitorStarted {
+            pathMonitor?.cancel()
+            pathMonitor = nil
+            monitorStarted = false
+        }
+    }
+
+    var lastCheckText: String {
+        guard lastCheck > 0 else { return "尚未检查" }
+        let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.unitsStyle = .short
+        return f.localizedString(for: Date(timeIntervalSince1970: TimeInterval(lastCheck)),
+                                 relativeTo: Date())
+    }
 
     // MARK: - 启动
 
@@ -98,7 +149,9 @@ final class FeedStore: ObservableObject {
                 var s = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
                 if skippedOld > 0 { s += " · 滤除旧闻 \(skippedOld)" }
                 self.status = s
-                UserDefaults.standard.set(Int(Date().timeIntervalSince1970), forKey: self.lastCheckKey)
+                self.lastCheck = Int(Date().timeIntervalSince1970)
+                UserDefaults.standard.set(self.lastCheck, forKey: "last_check_ts")
+                UserDefaults.standard.set(self.lastCheck, forKey: self.lastCheckKey)
             }
 
             // 推送只针对窗口内的新稿，避免一次推几十条历史

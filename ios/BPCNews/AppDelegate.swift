@@ -26,7 +26,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
         requestNotificationPermission()
         FeedStore.shared.bootstrap()
+        FeedStore.shared.startMonitoring()
         return true
+    }
+
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        FeedStore.shared.startMonitoring()
+        FeedStore.shared.refresh()
     }
 
     private func requestNotificationPermission() {
@@ -36,6 +42,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // MARK: - 后台刷新（系统调度，用来「自动发现」）
 
     func applicationDidEnterBackground(_ application: UIApplication) {
+        FeedStore.shared.stopMonitoring()   // 前台定时器停掉，交给系统后台任务
         scheduleBackground()
     }
 
