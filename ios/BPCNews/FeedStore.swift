@@ -173,6 +173,7 @@ final class FeedStore: ObservableObject {
             // 用「库内总数」展示，避免某一轮（快轮次）没拉到路透时误判为丢失
             let bbg = Library.shared.items.filter { $0.site == .bloomberg }.count
             let rtr = Library.shared.items.filter { $0.site == .reuters }.count
+            let wsj = Library.shared.items.filter { $0.site == .wsj }.count
 
             // 顶部延迟：各站最新稿的发布时间距今多久；以及本轮发现耗时
             let nowTs = Int(Date().timeIntervalSince1970)
@@ -187,7 +188,7 @@ final class FeedStore: ObservableObject {
                 if bbgNewest > 0 { self.bbgLatency = max(0, nowTs - bbgNewest) }
                 if rtrNewest > 0 { self.rtrLatency = max(0, nowTs - rtrNewest) }
                 self.lastRoundMs = roundMs
-                var s = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
+                var s = "彭博 \(bbg) · 路透 \(rtr) · WSJ \(wsj) · 新增 \(fresh.count)"
                 if skippedOld > 0 { s += " · 滤除旧闻 \(skippedOld)" }
                 if !fresh.isEmpty { self.newItemsToken += 1 }
                 self.status = s

@@ -75,7 +75,7 @@ def main() -> int:
             print(f"[ok]   {name}: {len(rules)} 条规则，JSON 合法，正则可编译")
 
     # 清理脚本/提取脚本的括号配平（粗检）
-    for name in ("cleanupJS", "extractBloomberg", "extractReuters", "extractArchive"):
+    for name in ("cleanupJS", "extractBloomberg", "extractPaywalled", "extractArchive"):
         raw = extract_raw(text, name)
         if raw is None:
             # cleanupJS 用的是普通 """，单独处理

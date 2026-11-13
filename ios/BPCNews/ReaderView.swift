@@ -257,7 +257,7 @@ struct ReaderView: View {
     private func footer(_ a: Article) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Hairline().padding(.top, 22)
-            Kicker(text: a.site == .bloomberg ? "Source · Bloomberg" : "Source · Reuters", size: 9)
+            Kicker(text: "Source · " + a.site.tag.capitalized, size: 9)
                 .padding(.top, 12)
             if let url = URL(string: a.url), !a.url.contains("news.google.com") {
                 Link(destination: url) {

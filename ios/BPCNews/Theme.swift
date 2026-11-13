@@ -48,14 +48,33 @@ struct Kicker: View {
 /// 信源标签：彭博=白底黑字（庄重），路透=橙底黑字（醒目）
 struct SourceTag: View {
     let site: String
+
+    private var text: String {
+        switch site {
+        case "bloomberg": return "BLOOMBERG"
+        case "reuters": return "REUTERS"
+        case "wsj": return "WSJ"
+        default: return site.uppercased()
+        }
+    }
+
+    private var bg: Color {
+        switch site {
+        case "bloomberg": return Theme.ink
+        case "reuters": return Theme.orange
+        case "wsj": return Color(red: 0.85, green: 0.22, blue: 0.22)
+        default: return Theme.surface
+        }
+    }
+
     var body: some View {
-        Text(site == "bloomberg" ? "BLOOMBERG" : "REUTERS")
+        Text(text)
             .font(.system(size: 9, weight: .black))
             .tracking(1.2)
-            .foregroundColor(Theme.bg)
+            .foregroundColor(site == "bloomberg" ? Theme.bg : .white)
             .padding(.horizontal, 5)
             .padding(.vertical, 2.5)
-            .background(site == "bloomberg" ? Theme.ink : Theme.orange)
+            .background(bg)
             .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
     }
 }

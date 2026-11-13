@@ -7,6 +7,10 @@ enum Settings {
     // 来源
     static var enabledSites: [String] {
         var out: [String] = []
+        if UserDefaults.standard.object(forKey: "src_wsj") == nil ||
+            UserDefaults.standard.bool(forKey: "src_wsj") {
+            out.append("wsj")
+        }
         if UserDefaults.standard.object(forKey: "src_bloomberg") == nil ||
             UserDefaults.standard.bool(forKey: "src_bloomberg") {
             out.append("bloomberg")

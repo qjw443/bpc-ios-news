@@ -45,7 +45,11 @@ enum Rules {
     """#
 
     static func blockListJSON(for site: Site) -> String {
-        site == .bloomberg ? blockBloomberg : blockReuters
+        switch site {
+        case .bloomberg: return blockBloomberg
+        case .reuters: return blockReuters
+        case .wsj: return blockReuters          // WSJ 同属「付费墙 + 计量」类型，复用同一套拦截
+        }
     }
 
     // MARK: - 页面清理（对应 BPC 的 cs_code）
@@ -217,84 +221,86 @@ enum Rules {
     })();
     """#
 
-    /// Reuters：按 DOM 文档顺序取「段落 + 图（含图注）」，接近官网排版
-    static let extractReuters = #"""
+    /// 路透 / WSJ：对付费墙页面通用的一套提取
+    ///   ① 拆掉 regwall/paywall 遮罩 + 解除 maxHeight 裁剪
+    ///   ② 先读 JSON-LD 的 articleBody（付费墙页最可靠的正文来源）
+    ///   ③ 再按宽选择器抓段落，过滤「Reporting by / Our Standards / opens new tab」等页脚样板
+    static let extractPaywalled = #"""
     (function(){
       var out={title:'',blocks:[],summary:[],audio:'',via:'',walls:[]};
-      function pushText(t){
-        if(!t) return;
-        var s=t.replace(/\s+\n/g,'\n').trim();
-        if(s.length>1 && !/^(advertisement|read more|sign up|register)/i.test(s))
-          out.blocks.push({type:'p',text:s});
+      function clean(s){ return (s||'').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').trim(); }
+      function boiler(s){
+        return /^(our standards|reporting by|editing by|additional reporting|make sense of|register now|opens new tab|read more|advertisement|sign up|subscribe|follow us)/i.test(s)
+          || /thomson reuters trust principle/i.test(s)
+          || /opens new tab/i.test(s)
+          || /^(汤森路透|我们的标准|记者|编辑|注册)/.test(s);
       }
-      function pushFigure(fig){
-        var img=fig.querySelector('img');
-        if(!img) return;
-        var src=img.currentSrc||img.src||img.getAttribute('data-src')||'';
-        if(!src || src.indexOf('data:')===0) return;
-        if(src.indexOf('//')===0) src='https:'+src;
-        var cap=fig.querySelector('figcaption');
-        out.blocks.push({type:'img', text:(cap?cap.innerText:'').trim().slice(0,200), src:src});
-      }
-      function title(){
-        var h=document.querySelector('h1');
-        out.title=(h?h.innerText:document.title||'').trim();
-      }
-      function walls(){
-        try{
-          document.querySelectorAll('[class*="paywall"],[data-testid*="paywall"],[class*="Regwall"]').forEach(function(e){
-            if(e.offsetHeight>60) out.walls.push((e.className||'').toString().slice(0,40));
-          });
-        }catch(e){}
-      }
-      function done(v){ out.via=v; walls(); return JSON.stringify(out); }
-
-      title();
-
-      // ① 段落与 figure 混排，保持官网顺序
-      var nodes=document.querySelectorAll('div[data-testid^="paragraph-"], div[data-testid="paragraph"], figure');
-      if(nodes.length>=2){
-        for(var i=0;i<nodes.length;i++){
-          if(nodes[i].tagName==='FIGURE') pushFigure(nodes[i]);
-          else pushText(nodes[i].innerText);
-        }
-        if(out.blocks.length>=3) return done('testid_mixed');
-      }
-
-      // ② Article 容器内的 p + figure
-      out.blocks=[];
-      var art=document.querySelector('div[data-testid="Article"], article, main, [role="main"]');
-      if(art){
-        var kids=art.querySelectorAll('p, figure');
-        for(var k=0;k<kids.length;k++){
-          if(kids[k].tagName==='FIGURE') pushFigure(kids[k]);
-          else {
-            var s=(kids[k].innerText||'').trim();
-            if(s.length>40 && !/^(advertisement|read more)/i.test(s)) out.blocks.push({type:'p',text:s});
+      try{
+        document.querySelectorAll('[class*="regwall"],[class*="paywall"],[class*="Paywall"],[class*="Regwall"],[data-testid*="paywall"]').forEach(function(e){
+          if(e.offsetHeight>40) out.walls.push((e.className||'').toString().slice(0,50));
+          e.remove();
+        });
+        document.querySelectorAll('div,section,article').forEach(function(e){
+          var cs=getComputedStyle(e);
+          if(cs.maxHeight && cs.maxHeight!=='none' && e.offsetHeight>240){
+            e.style.maxHeight='none'; e.style.overflow='visible';
           }
-        }
-      }
-      if(out.blocks.length>=3) return done('dom_article_mixed');
+          if(cs.position==='fixed' && e.offsetHeight>window.innerHeight*0.6) e.remove();
+        });
+      }catch(e){}
 
-      // ③ 全域兜底
-      out.blocks=[];
-      var all=document.querySelectorAll('body p, body figure');
-      for(var m=0;m<all.length;m++){
-        if(all[m].tagName==='FIGURE') pushFigure(all[m]);
-        else {
-          var u=(all[m].innerText||'').trim();
-          if(u.length>60) out.blocks.push({type:'p',text:u});
-        }
+      var h=document.querySelector('h1');
+      out.title=clean(h?h.innerText:(document.title||''));
+
+      function push(t){
+        var s=clean(t);
+        if(s.length>30 && !boiler(s)) out.blocks.push({type:'p',text:s});
       }
-      return done('dom_body_mixed');
+
+      // ② JSON-LD articleBody
+      try{
+        document.querySelectorAll('script[type="application/ld+json"]').forEach(function(sc){
+          var j=null; try{ j=JSON.parse(sc.textContent); }catch(e){ return; }
+          var arr=Array.isArray(j)?j:[j];
+          arr.forEach(function(o){
+            if(!o) return;
+            var body=o.articleBody||o.article_body;
+            if(body && body.length>200){
+              var segs=body.split(/\n{2,}/); if(segs.length<3){ segs=body.split(/[.!?]\s+/); } segs.forEach(function(seg){ push(seg); });
+            }
+          });
+        });
+      }catch(e){}
+      if(out.blocks.length>=4){ out.via='jsonld_body'; return JSON.stringify(out); }
+
+      // ③ 宽选择器
+      out.blocks=[];
+      var sel=['div[data-testid^="paragraph"]','[data-testid="paragraph"]',
+               'article p','div[class*="article-body"] p','div[class*="ArticleBody"] p',
+               'div[class*="article-content"] p','div[class*="content-body"] p',
+               'div[class*="article__body"] p','main p','body p'];
+      for(var si=0; si<sel.length; si++){
+        var nodes=document.querySelectorAll(sel[si]);
+        if(!nodes.length) continue;
+        var seen={}, acc=[];
+        for(var i=0;i<nodes.length;i++){
+          var t=clean(nodes[i].innerText);
+          if(t.length<=30 || boiler(t) || seen[t]) continue;
+          seen[t]=1; acc.push({type:'p',text:t});
+        }
+        if(acc.length>=4){ out.blocks=acc; out.via='sel'+si; return JSON.stringify(out); }
+      }
+      out.via='none';
+      return JSON.stringify(out);
     })();
     """#
 
-    static func extractJS(for site: Site) -> String {
-        site == .bloomberg ? extractBloomberg : extractReuters
-    }
+    /// 路透
+    static let extractReuters = extractPaywalled
 
-    /// archive.ph 兜底
+    /// 华尔街日报（中文站结构不同，但同属付费墙，复用同一套）
+    static let extractWSJ = extractPaywalled
+
     static let extractArchive = #"""
     (function(){
       var out={title:'',blocks:[],summary:[],audio:'',via:'archive',walls:[]};

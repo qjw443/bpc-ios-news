@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 enum FeedFilter: String, CaseIterable, Identifiable {
-    case all, unread, bloomberg, reuters, saved
+    case all, unread, bloomberg, reuters, wsj, saved
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -10,6 +10,7 @@ enum FeedFilter: String, CaseIterable, Identifiable {
         case .unread: return "未读"
         case .bloomberg: return "彭博"
         case .reuters: return "路透"
+        case .wsj: return "WSJ"
         case .saved: return "收藏"
         }
     }
@@ -364,6 +365,7 @@ struct FeedView: View {
         case .unread: return unreadCount
         case .bloomberg: return store.items.filter { $0.site == .bloomberg }.count
         case .reuters: return store.items.filter { $0.site == .reuters }.count
+        case .wsj: return store.items.filter { $0.site == .wsj }.count
         case .saved: return store.items.filter { $0.saved }.count
         }
     }
@@ -375,6 +377,7 @@ struct FeedView: View {
         case .unread: base = base.filter { !$0.read }
         case .bloomberg: base = base.filter { $0.site == .bloomberg }
         case .reuters: base = base.filter { $0.site == .reuters }
+        case .wsj: base = base.filter { $0.site == .wsj }
         case .saved: base = base.filter { $0.saved }
         }
         let q = query.trimmedLower

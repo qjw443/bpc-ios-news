@@ -175,7 +175,7 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
 
         // 只接受彭博/路透自己的文章地址
         let host = url.host ?? ""
-        if !(host.contains("bloomberg.com") || host.contains("reuters.com")) {
+        if !site.domains.contains(where: { host.contains($0) }) {
             onFail(FetchError.loadFailed("非目标站点地址：\(host)"))
             return
         }

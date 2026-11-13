@@ -13,8 +13,33 @@ final class TranslateService {
     enum Source: String { case online = "在线", dict = "词典", none = "未译" }
 
     private let lock = NSLock()
-    private var cache: [String: String] = [:]        // 原文 → 译文
+    private var cache: [String: String] = [:]        // 原文 → 译文（内存）
+    private var diskCache: [String: String] = [:]    // 原文 → 译文（落盘，重启仍在）
     private var inFlight = Set<String>()
+
+    init() {
+        if let d = try? Data(contentsOf: Self.cacheURL),
+           let m = try? JSONDecoder().decode([String: String].self, from: d) {
+            diskCache = m
+        }
+    }
+
+    private static var cacheURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("translate_cache.json")
+    }
+
+    private func persist() {
+        let snapshot = diskCache
+        DispatchQueue.global(qos: .utility).async {
+            if let d = try? JSONEncoder().encode(snapshot) {
+                try? d.write(to: Self.cacheURL)
+            }
+        }
+    }
 
     private lazy var session: URLSession = {
         let c = URLSessionConfiguration.default
@@ -31,7 +56,9 @@ final class TranslateService {
         var pending: [Int] = []
         lock.lock()
         for (i, t) in texts.enumerated() {
-            if let hit = cache[t], !hit.isEmpty { out[i] = hit } else { pending.append(i) }
+            if let hit = cache[t], !hit.isEmpty { out[i] = hit }
+            else if let hit = diskCache[t], !hit.isEmpty { out[i] = hit; cache[t] = hit }
+            else { pending.append(i) }
         }
         lock.unlock()
 
@@ -41,7 +68,7 @@ final class TranslateService {
         }
 
         let group = DispatchGroup()
-        let sem = DispatchSemaphore(value: 4)
+        let sem = DispatchSemaphore(value: 6)
         var onlineHit = 0
         let hitLock = NSLock()
 
@@ -54,7 +81,11 @@ final class TranslateService {
                     defer { sem.signal(); group.leave() }
                     if let zh = zh, !zh.isEmpty {
                         out[i] = zh
-                        self.lock.lock(); self.cache[texts[i]] = zh; self.lock.unlock()
+                        self.lock.lock()
+                        self.cache[texts[i]] = zh
+                        self.diskCache[texts[i]] = zh
+                        self.lock.unlock()
+                        self.persist()
                         hitLock.lock(); onlineHit += 1; hitLock.unlock()
                     }
                 }

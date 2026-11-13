@@ -5,12 +5,30 @@ import Foundation
 enum Site: String, Codable, CaseIterable {
     case bloomberg
     case reuters
+    case wsj
 
-    var label: String { self == .bloomberg ? "彭博" : "路透" }
-    var tag: String { self == .bloomberg ? "BLOOMBERG" : "REUTERS" }
+    var label: String {
+        switch self {
+        case .bloomberg: return "彭博"
+        case .reuters: return "路透"
+        case .wsj: return "华尔街日报"
+        }
+    }
+
+    var tag: String {
+        switch self {
+        case .bloomberg: return "BLOOMBERG"
+        case .reuters: return "REUTERS"
+        case .wsj: return "WSJ"
+        }
+    }
 
     var domains: [String] {
-        self == .bloomberg ? ["bloomberg.com", "bwbx.io"] : ["reuters.com"]
+        switch self {
+        case .bloomberg: return ["bloomberg.com", "bwbx.io"]
+        case .reuters: return ["reuters.com"]
+        case .wsj: return ["wsj.com", "wsj.net", "dowjones.io"]
+        }
     }
 }
 

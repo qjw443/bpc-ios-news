@@ -47,7 +47,7 @@ struct MacroView: View {
             }
         }
         // 增量补翻：每 8 秒一次（已翻的节点已是中文，会自动跳过）
-        .onReceive(Timer.publish(every: 8, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
             guard ctl.ready, !busyText, !busyImage, textRounds < 40 else { return }
             translateText()
         }
