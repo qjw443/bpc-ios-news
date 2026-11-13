@@ -3,14 +3,15 @@ import WebKit
 import Vision
 
 /// 宏观页：内嵌 yardeni.com/charts（图表站）
-///   · 页面正文中文化
-///   · 图片内文字翻译：Vision OCR → 翻译 → 以「图下对照块」呈现（不覆盖原图，避免影响看图）
+///   · 不需要按钮：加载完成即自动翻译正文，并每 8 秒增量补翻新出现的英文
+///   · 图片：加载后自动 OCR → 翻译 → 在**图下方**插入中文对照块（不覆盖原图）
 struct MacroView: View {
     @StateObject private var ctl = MacroController()
     @State private var busyText = false
     @State private var busyImage = false
-    @State private var status = ""
-    @AppStorage("macro_translated") private var translatedOnce = false
+    @State private var status = "加载中…"
+    @State private var imagesDone = false
+    @State private var textRounds = 0
 
     var body: some View {
         NavigationStack {
@@ -20,27 +21,35 @@ struct MacroView: View {
                     header
                     Divider().overlay(Theme.hairline)
                     WebContainer(webView: ctl.webView)
-                    if !status.isEmpty {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(busyText || busyImage ? Theme.orange : Theme.hairline)
+                            .frame(width: 4, height: 4)
                         Text(status)
                             .font(.system(size: 10))
                             .foregroundColor(Theme.inkDim)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14).padding(.vertical, 6)
-                            .background(Theme.surface)
+                        Spacer()
                     }
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+                    .background(Theme.surface)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            ctl.load()
-            if !translatedOnce {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
-                    translateText()
-                    translatedOnce = true
-                }
+        .onAppear { ctl.load() }
+        // 页面加载完成：立刻翻一轮，稍后翻图片
+        .onChange(of: ctl.ready) { ok in
+            guard ok else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { translateText() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
+                if !imagesDone { imagesDone = true; translateImages() }
             }
+        }
+        // 增量补翻：每 8 秒一次（已翻的节点已是中文，会自动跳过）
+        .onReceive(Timer.publish(every: 8, on: .main, in: .common).autoconnect()) { _ in
+            guard ctl.ready, !busyText, !busyImage, textRounds < 40 else { return }
+            translateText()
         }
     }
 
@@ -50,16 +59,14 @@ struct MacroView: View {
                 Text("宏观图表")
                     .font(.system(size: 17, weight: .heavy))
                     .foregroundColor(Theme.ink)
-                Kicker(text: "YARDENI · CHARTS", size: 8)
+                Kicker(text: "YARDENI · CHARTS　自动中文", size: 8)
             }
             Spacer()
-            actionButton(title: busyText ? "译中…" : "中文",
-                         icon: "character.book.closed", busy: busyText) { translateText() }
-            actionButton(title: busyImage ? "译图中…" : "图片翻译",
-                         icon: "photo.on.rectangle.angled", busy: busyImage) { translateImages() }
             Button {
+                textRounds = 0
+                imagesDone = false
+                status = "重新加载…"
                 ctl.webView.reload()
-                status = ""
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 13, weight: .semibold))
@@ -74,28 +81,12 @@ struct MacroView: View {
         .background(Theme.bg)
     }
 
-    private func actionButton(title: String, icon: String, busy: Bool,
-                              action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
-                Text(title).font(.system(size: 10.5, weight: .semibold))
-            }
-            .foregroundColor(busy ? Theme.inkDim : Theme.orange)
-            .padding(.horizontal, 8)
-            .frame(height: 30)
-            .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .disabled(busy)
-    }
-
-    // MARK: - 正文翻译
+    // MARK: - 正文（增量）
 
     private func translateText() {
         guard !busyText else { return }
         busyText = true
-        status = "正在读取页面文字…"
+        textRounds += 1
 
         ctl.webView.evaluateJavaScript(MacroJS.collectTexts) { result, _ in
             guard let s = result as? String,
@@ -103,7 +94,7 @@ struct MacroView: View {
                   let texts = try? JSONSerialization.jsonObject(with: data) as? [String],
                   !texts.isEmpty else {
                 busyText = false
-                status = "页面没有可翻译的英文段落（或尚未加载完）"
+                status = imagesDone ? "中文对照完成" : "正文已中文"
                 return
             }
             status = "翻译 \(texts.count) 段…"
@@ -111,20 +102,21 @@ struct MacroView: View {
                 let payload = (try? JSONSerialization.data(withJSONObject: zh)) ?? Data("[]".utf8)
                 let js = "window.__bpcApplyTexts("
                     + (String(data: payload, encoding: .utf8) ?? "[]") + ");"
-                ctl.webView.evaluateJavaScript(js) { _, _ in
+                ctl.webView.evaluateJavaScript(js) { res, _ in
                     busyText = false
-                    status = "已翻译 \(zh.count) 段（\(source.rawValue)）"
+                    let applied = (res as? NSNumber)?.intValue ?? zh.count
+                    status = "已中文 \(applied) 段（\(source.rawValue)）"
                 }
             }
         }
     }
 
-    // MARK: - 图片翻译（OCR → 图下对照块）
+    // MARK: - 图片（自动，一次）
 
     private func translateImages() {
         guard !busyImage else { return }
         busyImage = true
-        status = "正在收集图片…"
+        status = "识别图中文字…"
 
         ctl.webView.evaluateJavaScript(MacroJS.collectImages) { result, _ in
             guard let s = result as? String,
@@ -132,10 +124,9 @@ struct MacroView: View {
                   let imgs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
                   !imgs.isEmpty else {
                 busyImage = false
-                status = "没有找到可翻译的图片"
+                status = "没有需要翻译的图片"
                 return
             }
-            status = "识别 \(imgs.count) 张图片…"
             self.runImagePipeline(imgs, index: 0, done: 0)
         }
     }
@@ -143,14 +134,14 @@ struct MacroView: View {
     private func runImagePipeline(_ imgs: [[String: Any]], index: Int, done: Int) {
         guard index < imgs.count else {
             busyImage = false
-            status = "图片翻译完成：\(done) 张（译文在图下方对照）"
+            status = "完成：正文中文 · \(done) 张图有中文对照"
             return
         }
         guard let src = imgs[index]["src"] as? String, let url = URL(string: src) else {
             runImagePipeline(imgs, index: index + 1, done: done)
             return
         }
-        status = "识别第 \(index + 1)/\(imgs.count) 张…"
+        status = "识别第 \(index + 1)/\(imgs.count) 张图…"
 
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("https://yardeni.com/", forHTTPHeaderField: "Referer")
@@ -170,7 +161,7 @@ struct MacroView: View {
                     var items: [[String: Any]] = []
                     for (i, line) in lines.enumerated() where i < zh.count {
                         let t = zh[i]
-                        guard !t.isEmpty, t != line.text else { continue }
+                        guard !t.isEmpty, t != line.text, TextQuality.isTranslated(t) || t.count > 2 else { continue }
                         items.append(["t": t])
                     }
                     DispatchQueue.main.async {
@@ -179,8 +170,7 @@ struct MacroView: View {
                             return
                         }
                         let payload = (try? JSONSerialization.data(withJSONObject: items)) ?? Data("[]".utf8)
-                        let js = "window.__bpcCaption("
-                            + "\(index), "
+                        let js = "window.__bpcCaption(\(index), "
                             + (String(data: payload, encoding: .utf8) ?? "[]") + ");"
                         self.ctl.webView.evaluateJavaScript(js) { _, _ in
                             self.runImagePipeline(imgs, index: index + 1, done: done + 1)
@@ -192,7 +182,7 @@ struct MacroView: View {
     }
 }
 
-// MARK: - WebView 容器
+// MARK: - WebView
 
 struct WebContainer: UIViewRepresentable {
     let webView: WKWebView
@@ -202,7 +192,8 @@ struct WebContainer: UIViewRepresentable {
 
 final class MacroController: NSObject, ObservableObject, WKNavigationDelegate {
     let webView: WKWebView
-    private var loaded = false
+    @Published var ready = false
+    private var loadedOnce = false
 
     override init() {
         let cfg = WKWebViewConfiguration()
@@ -218,20 +209,22 @@ final class MacroController: NSObject, ObservableObject, WKNavigationDelegate {
     }
 
     func load() {
-        guard !loaded, let url = URL(string: "https://yardeni.com/charts/") else { return }
-        loaded = true
+        guard !loadedOnce, let url = URL(string: "https://yardeni.com/charts/") else { return }
+        loadedOnce = true
         var req = URLRequest(url: url, timeoutInterval: 30)
         req.setValue(Rules.chromeUA, forHTTPHeaderField: "User-Agent")
         webView.load(req)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        ready = true
     }
 }
 
 // MARK: - OCR
 
 enum OCR {
-    struct Line {
-        let text: String
-    }
+    struct Line { let text: String }
 
     static func lines(from imageData: Data, completion: @escaping ([Line]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -263,6 +256,7 @@ enum OCR {
 
 enum MacroJS {
 
+    /// 收集「还是英文」的文本节点（中文节点天然被过滤掉，所以可反复增量调用）
     static let collectTexts = """
     (function(){
       window.__bpcNodes = [];
@@ -272,7 +266,7 @@ enum MacroJS {
         var n;
         while ((n = walker.nextNode())) {
           var t = (n.nodeValue || '').trim();
-          if (t.length > 2 && /[A-Za-z]{3}/.test(t)) {
+          if (t.length > 2 && /[A-Za-z]{3}/.test(t) && !/[\\u4e00-\\u9fff]/.test(t)) {
             window.__bpcNodes.push(n);
             out.push(t);
             if (out.length >= 200) break;
@@ -304,6 +298,8 @@ enum MacroJS {
         try {
           var im = document.images[idx];
           if (!im) return 0;
+          if (im.getAttribute('data-bpc-done') === '1') return 0;
+          im.setAttribute('data-bpc-done', '1');
           var host = im.closest('figure') || im.parentElement || im;
           var box = document.createElement('div');
           box.setAttribute('data-bpc-caption', '1');

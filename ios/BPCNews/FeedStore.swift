@@ -159,8 +159,10 @@ final class FeedStore: ObservableObject {
                 item.summary = f.summary
                 item.author = f.author
                 // 词典基线：先给一个中文（哪怕不完美），系统翻译随后覆盖更高质量的结果
+                // 词典只作「临时占位」，且必须整句基本是中文才写入；
+                // 半成品（Mexico 降息 Fuels…）一律不写，交给在线翻译处理
                 let baseline = Dict.translate(title)
-                if !baseline.isEmpty { item.titleZh = baseline }
+                if TextQuality.isTranslated(baseline) { item.titleZh = baseline }
                 if Settings.zhMode == "dict", !f.summary.isEmpty {
                     item.summary = Dict.translate(f.summary)
                 }

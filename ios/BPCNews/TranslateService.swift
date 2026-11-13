@@ -65,7 +65,8 @@ final class TranslateService {
             var usedDict = false
             for i in texts.indices where out[i].isEmpty {
                 let zh = Dict.translate(texts[i])
-                if !zh.isEmpty, zh != texts[i] {
+                // 只接受「整句基本中文」的词典结果，否则视为失败（返回原文让上层重试）
+                if TextQuality.isTranslated(zh), zh != texts[i] {
                     out[i] = zh
                     usedDict = true
                 } else {

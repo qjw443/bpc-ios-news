@@ -122,6 +122,10 @@ struct FeedView: View {
             }
             .onChange(of: store.items.count) { _ in translateTitles() }
             .onChange(of: store.newItemsToken) { _ in translateTitles() }
+            // 用户要求：每 5 秒自动扫一遍未完成/半成品的翻译
+            .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+                translateTitles()
+            }
             .onReceive(openItem) { note in
                 if let id = note.object as? String {
                     path = [id]
@@ -537,7 +541,10 @@ struct FeedView: View {
     private func translateTitles() {
         guard !titleBusy else { return }
 
-        let pool = store.items.filter { $0.titleZh.isEmpty && !titleTried.contains($0.id) }
+        // 未翻译 + 半成品（半英半中）都要重翻
+        let pool = store.items.filter {
+            TextQuality.needsRetranslate($0.titleZh) && !titleTried.contains($0.id)
+        }
         guard !pool.isEmpty else {
             dictFill()
             return
@@ -556,11 +563,11 @@ struct FeedView: View {
         TranslateService.shared.translate(texts) { results, _ in
             for (i, it) in batch.enumerated() where i < results.count {
                 let t = results[i].trimmingCharacters(in: .whitespacesAndNewlines)
-                if t.isEmpty || t == it.title {
-                    // 没译出来：允许下次重试（最多 2 次），超过就不再占用批次
+                // 只接受「整句基本中文」的结果；半成品不放行，继续排队重试
+                guard TextQuality.isTranslated(t), t != it.title else {
                     let n = (retries[it.id] ?? 0) + 1
                     retries[it.id] = n
-                    if n <= 2 { titleTried.remove(it.id) }
+                    if n <= 4 { titleTried.remove(it.id) }
                     continue
                 }
                 Library.shared.setTitleZh(it.id, t)
