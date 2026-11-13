@@ -68,25 +68,64 @@ final class ThumbnailLoader {
                 done(nil)
                 return
             }
-            done(Self.parseOGImage(html, site: item.site))
+            done(Self.parseImageURL(html, site: item.site))
         }.resume()
     }
 
-    /// 解析 og:image（属性顺序两种都要支持），拿不到再退回 twitter:image
-    static func parseOGImage(_ html: String, site: Site) -> String? {
-        let patterns = [
+    /// 四级回退取图：og:image → JSON-LD → 站点 CDN 特征 → <img> 启发式。
+    /// 之所以要四级：实测不少新闻站（含 BBC/Guardian 的某些版面）根本没有 og:image，
+    /// 只认一个 meta 会导致缩略图大面积空窗。
+    static func parseImageURL(_ html: String, site: Site) -> String? {
+        if let s = firstMatch(html, patterns: [
             #"<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']"#,
             #"<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']"#,
             #"<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']"#,
-        ]
+            #"<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']"#,
+        ]) { return s }
+
+        // JSON-LD（Bloomberg/Reuters 都内嵌结构化数据）
+        if let s = firstMatch(html, patterns: [
+            #""image"\s*:\s*\[\s*\{[^}]*?"url"\s*:\s*"([^"]+)""#,
+            #""image"\s*:\s*\[\s*"([^"]+)""#,
+            #""image"\s*:\s*"([^"]+)""#,
+            #""thumbnailUrl"\s*:\s*"([^"]+)""#,
+        ]) { return s }
+
+        switch site {
+        case .bloomberg:
+            if let s = firstMatch(html, patterns: [
+                #"(https://assets\.bwbx\.io/images/[^"'\s\\]+?\.(?:jpg|jpeg|png|webp))"#,
+            ]) { return s }
+        case .reuters:
+            if let s = firstMatch(html, patterns: [
+                #"(https://www\.reuters\.com/resizer/[^"'\s\\]+?\.(?:jpg|jpeg|png|webp))"#,
+                #"(https://cloudfront-us-east-2\.images\.arcpublishing\.com/reuters/[^"'\s\\]+?\.(?:jpg|jpeg|png|webp))"#,
+            ]) { return s }
+        }
+
+        // 最后兜底：正文里第一张“像图”的图
+        if let s = firstMatch(html, patterns: [
+            #"<img[^>]+src=["'](https?://[^"']+?\.(?:jpg|jpeg|png|webp))["']"#,
+            #"<img[^>]+data-src=["'](https?://[^"']+?\.(?:jpg|jpeg|png|webp))["']"#,
+        ], reject: ["logo", "icon", "avatar", "sprite", "favicon", "1x1", "pixel"]) {
+            return s
+        }
+        return nil
+    }
+
+    private static func firstMatch(_ html: String, patterns: [String],
+                                   reject: [String] = []) -> String? {
         for p in patterns {
-            if let re = try? NSRegularExpression(pattern: p, options: [.caseInsensitive]),
-               let m = re.firstMatch(in: html, range: NSRange(html.startIndex..<html.endIndex, in: html)),
-               m.numberOfRanges > 1,
-               let r = Range(m.range(at: 1), in: html) {
+            guard let re = try? NSRegularExpression(pattern: p, options: [.caseInsensitive]) else { continue }
+            let range = NSRange(html.startIndex..<html.endIndex, in: html)
+            for m in re.matches(in: html, options: [], range: range) where m.numberOfRanges > 1 {
+                guard let r = Range(m.range(at: 1), in: html) else { continue }
                 var s = String(html[r])
                 if s.hasPrefix("//") { s = "https:" + s }
-                if s.hasPrefix("http") { return s }
+                guard s.hasPrefix("http") else { continue }
+                let low = s.lowercased()
+                if reject.contains(where: { low.contains($0) }) { continue }
+                return s
             }
         }
         return nil
