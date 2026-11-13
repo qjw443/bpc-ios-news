@@ -68,6 +68,7 @@ struct FeedView: View {
                             metricsStrip
                             quickBar
                             if !store.lastError.isEmpty { errorStrip }
+                            if !notifAuthorized { notifStrip }
                             if store.loading && store.items.isEmpty {
                                 skeleton
                             } else if filtered.isEmpty {
@@ -440,6 +441,29 @@ struct FeedView: View {
         if filter == .unread { return "下拉或等自动刷新，新稿会自动出现在最上面" }
         if filter == .saved { return "长按任意一条，点「收藏」即可加入" }
         return "检查网络或 VPN；也可以在设置里确认两个源的健康度"
+    }
+
+    @AppStorage("notif_authorized") private var notifAuthorized: Bool = true
+
+    private var notifStrip: some View {
+        Button {
+            if let u = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(u)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bell.slash.fill")
+                    .font(.system(size: 10)).foregroundColor(Theme.orange)
+                Text("通知未开启，点此去系统设置打开")
+                    .font(.system(size: 10.5)).foregroundColor(Theme.inkDim)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(Theme.hairline)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 9)
+            .background(Theme.orange.opacity(0.10))
+        }
+        .buttonStyle(.plain)
     }
 
     private var errorStrip: some View {

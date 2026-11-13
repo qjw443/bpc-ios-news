@@ -166,8 +166,9 @@ final class FeedStore: ObservableObject {
             }
 
             let fresh = Library.shared.merge(mapped)
-            let bbg = mapped.filter { $0.site == .bloomberg }.count
-            let rtr = mapped.count - bbg
+            // 用「库内总数」展示，避免某一轮（快轮次）没拉到路透时误判为丢失
+            let bbg = Library.shared.items.filter { $0.site == .bloomberg }.count
+            let rtr = Library.shared.items.filter { $0.site == .reuters }.count
 
             // 顶部延迟：各站最新稿的发布时间距今多久；以及本轮发现耗时
             let nowTs = Int(Date().timeIntervalSince1970)
@@ -326,7 +327,10 @@ final class FeedStore: ObservableObject {
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             let req = UNNotificationRequest(identifier: UUID().uuidString,
                                             content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+            UNUserNotificationCenter.current().add(req) { err in
+                if let err = err { print("[notif] add failed: \(err.localizedDescription)") }
+                else { print("[notif] delivered: \(content.title)") }
+            }
         }
 
         if !first.titleZh.isEmpty {
