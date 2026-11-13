@@ -511,7 +511,7 @@ struct FeedRow: View {
             }
 
             if !item.author.isEmpty {
-                Kicker(text: item.author.uppercased(), size: 7.5, color: Theme.hairline)
+                Kicker(text: item.author.uppercased(), color: Theme.hairline, size: 7.5)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

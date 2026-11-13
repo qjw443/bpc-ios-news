@@ -165,7 +165,7 @@ struct ReaderView: View {
             .padding(.top, 10)
 
             if let it = Library.shared.item(for: itemId), !it.author.isEmpty {
-                Kicker(text: it.author.uppercased(), size: 8, color: Theme.hairline)
+                Kicker(text: it.author.uppercased(), color: Theme.hairline, size: 8)
             }
 
             Text(a.titleZh.isEmpty ? a.title : a.titleZh)
