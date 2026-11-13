@@ -71,9 +71,14 @@ jobs:
           echo "---- artifacts ----"
           ls -lh BPCNews-unsigned.ipa
           echo "---- app info ----"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"
-          /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP/Info.plist"
+          BID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+          echo "CFBundleIdentifier=$BID"
+          test -n "$BID" || { echo "!! Info.plist 缺 CFBundleIdentifier"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist" || true
+          /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP/Info.plist" || true
+          echo "---- binary ----"
+          file "$APP/BPCNews"
+          ls -lh "$APP/BPCNews"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
