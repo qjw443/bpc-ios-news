@@ -123,6 +123,8 @@ struct FeedView: View {
         titleTexts = []
         titleResults = []
         titleBusy = false
+        // 标题已是中文：这个时候再弹通知
+        store.notifyPending()
     }
 
     // MARK: 报头
@@ -167,6 +169,14 @@ struct FeedView: View {
                        color: store.lastError.isEmpty ? Theme.orange : .red, size: 9)
                 Spacer()
                 Kicker(text: "\(store.items.count) 条", size: 9)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.system(size: 8))
+                    .foregroundColor(Theme.hairline)
+                Kicker(text: store.latencyText, size: 8)
+                Spacer()
             }
             Hairline()
         }
@@ -214,6 +224,15 @@ struct FeedRow: View {
                 HStack(spacing: 8) {
                     SourceTag(site: item.site.rawValue)
                     Kicker(text: TimeFmt.feedText(item.ts) + " 北京", size: 9)
+                    if Int(Date().timeIntervalSince1970) - item.arrivedTs < 1800 {
+                        Text("NEW")
+                            .font(.system(size: 8, weight: .black))
+                            .tracking(1)
+                            .foregroundColor(Theme.bg)
+                            .padding(.horizontal, 4).padding(.vertical, 1.5)
+                            .background(Theme.orange)
+                            .clipShape(RoundedRectangle(cornerRadius: 2))
+                    }
                     Spacer()
                     if item.fetched {
                         Image(systemName: "checkmark.circle.fill")
@@ -243,7 +262,6 @@ struct FeedRow: View {
                 }
             }
 
-            thumbnail
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)
@@ -251,29 +269,4 @@ struct FeedRow: View {
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let s = item.imageURL, let u = URL(string: s) {
-            AsyncImage(url: u) { phase in
-                switch phase {
-                case .success(let img):
-                    img.resizable().scaledToFill()
-                default:
-                    Rectangle().fill(Theme.raised)
-                }
-            }
-            .frame(width: 86, height: 66)
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        } else {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Theme.raised)
-                .frame(width: 86, height: 66)
-                .overlay(
-                    Image(systemName: "newspaper")
-                        .font(.system(size: 15))
-                        .foregroundColor(Theme.hairline)
-                )
-        }
-    }
 }

@@ -24,6 +24,23 @@ final class FeedStore: ObservableObject {
     private var monitorStarted = false
     @Published var lastCheck: Int = UserDefaults.standard.integer(forKey: "last_check_ts")
 
+    // 顶部延迟指标：各站「最新稿发布至今」的秒数，以及本轮发现耗时
+    @Published var bbgLatency: Int = -1
+    @Published var rtrLatency: Int = -1
+    @Published var lastRoundMs: Int = -1
+
+    var latencyText: String {
+        func fmt(_ s: Int) -> String {
+            if s < 0 { return "—" }
+            if s < 60 { return "\(s) 秒" }
+            if s < 3600 { return "\(s / 60) 分钟" }
+            return "\(s / 3600) 小时"
+        }
+        var parts = ["彭博 \(fmt(bbgLatency))", "路透 \(fmt(rtrLatency))"]
+        if lastRoundMs >= 0 { parts.append("本轮 \(String(format: "%.1f", Double(lastRoundMs) / 1000))s") }
+        return parts.joined(separator: "　·　")
+    }
+
     // MARK: 自动监控（不需要手动下拉）
 
     /// 前台定时轮询 + 网络恢复立即刷 + 回到前台立即刷
@@ -75,9 +92,6 @@ final class FeedStore: ObservableObject {
         Library.shared.migrate()          // 清掉旧版第三方源留下的脏条目
         items = Library.shared.items
         status = "规则编译中…"
-        ThumbnailLoader.shared.onUpdate = { [weak self] in
-            self?.items = Library.shared.items
-        }
         PaywallEngine.shared.prepare { [weak self] in
             self?.status = "规则就绪（\(PaywallEngine.shared.compiledCount) 条）"
         }
@@ -91,6 +105,7 @@ final class FeedStore: ObservableObject {
     func refresh(notify: Bool = false, completion: (() -> Void)? = nil) {
         guard !busy else { completion?(); return }
         busy = true
+        let roundStart = Date()
         DispatchQueue.main.async { self.loading = true; self.lastError = "" }
 
         // 看门狗：poll 不回调（网络挂住）时把状态复位，避免刷新键变死键
@@ -145,24 +160,38 @@ final class FeedStore: ObservableObject {
             let fresh = Library.shared.merge(mapped)
             let bbg = mapped.filter { $0.site == .bloomberg }.count
             let rtr = mapped.count - bbg
+
+            // 顶部延迟：各站最新稿的发布时间距今多久；以及本轮发现耗时
+            let nowTs = Int(Date().timeIntervalSince1970)
+            let bbgNewest = Library.shared.items.filter { $0.site == .bloomberg }.map { $0.ts }.max() ?? 0
+            let rtrNewest = Library.shared.items.filter { $0.site == .reuters }.map { $0.ts }.max() ?? 0
+            let roundMs = Int(Date().timeIntervalSince(roundStart) * 1000)
+
             DispatchQueue.main.async {
                 self.items = Library.shared.items
                 self.loading = false
                 self.busy = false
+                if bbgNewest > 0 { self.bbgLatency = max(0, nowTs - bbgNewest) }
+                if rtrNewest > 0 { self.rtrLatency = max(0, nowTs - rtrNewest) }
+                self.lastRoundMs = roundMs
                 var s = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
                 if skippedOld > 0 { s += " · 滤除旧闻 \(skippedOld)" }
                 self.status = s
                 self.lastCheck = Int(Date().timeIntervalSince1970)
                 UserDefaults.standard.set(self.lastCheck, forKey: "last_check_ts")
                 UserDefaults.standard.set(self.lastCheck, forKey: self.lastCheckKey)
-                // 标题带图：只为缺少缩略图的最新 12 条补 og:image（并发 3，失败跳过）
-                ThumbnailLoader.shared.fill(Library.shared.items, limit: 12)
-            }
 
-            // 推送只针对窗口内的新稿，避免一次推几十条历史
-            let pushCut = Int(Date().timeIntervalSince1970) - Settings.pushWindowMinutes * 60
-            let pushable = fresh.filter { $0.ts >= pushCut }
-            if notify && !pushable.isEmpty { self.notifyNew(pushable) }
+                // 推送：前台等标题翻完再推（FeedView 调 notifyPending），后台这里直接推
+                let pushCut = nowTs - Settings.pushWindowMinutes * 60
+                let pushable = fresh.filter { $0.ts >= pushCut }
+                if notify && !pushable.isEmpty {
+                    if UIApplication.shared.applicationState == .active {
+                        self.pendingNotify = pushable
+                    } else {
+                        self.notifyNew(pushable)
+                    }
+                }
+            }
             completion?()
         }
     }
@@ -192,10 +221,6 @@ final class FeedStore: ObservableObject {
                 a.id = item.id
                 a.publishedTs = item.ts          // 发布时间随正文一起落盘（阅读页显示北京时间）
                 Library.shared.markFetched(item.id, article: a)
-                // 正文首图顺手当列表缩略图
-                if item.imageURL == nil, let img = a.blocks.first(where: { $0.type == "img" && $0.src != nil })?.src {
-                    Library.shared.setImage(item.id, img)
-                }
                 self.fetchers.removeValue(forKey: item.id)
                 DispatchQueue.main.async {
                     self.items = Library.shared.items
@@ -220,10 +245,26 @@ final class FeedStore: ObservableObject {
         run(botMode: false)
     }
 
+    /// 已翻译、待推送的前台新稿（等标题变中文后再弹通知）
+    private var pendingNotify: [FeedItem] = []
+    private var notifiedIds: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "notified_ids") ?? [])
+
+    /// FeedView 在标题翻译完成后调用：此时标题已是中文，再弹通知
+    func notifyPending() {
+        guard !pendingNotify.isEmpty else { return }
+        let todo = pendingNotify.filter { !notifiedIds.contains($0.id) }
+        pendingNotify = []
+        guard !todo.isEmpty else { return }
+        notifyNew(Array(todo.prefix(3)))
+    }
+
     // MARK: - 本地通知（无 APNs，全部在设备上）
 
     private func notifyNew(_ fresh: [FeedItem]) {
         guard let first = fresh.first else { return }
+        for it in fresh { notifiedIds.insert(it.id) }
+        if notifiedIds.count > 500 { notifiedIds = Set(notifiedIds.suffix(200)) }
+        UserDefaults.standard.set(Array(notifiedIds), forKey: "notified_ids")
 
         // 推送文案优先用已翻译的标题；没有就当场翻：
         //   有大模型 Key → 走 LLM（后台也能用）；否则用离线词典兜底。

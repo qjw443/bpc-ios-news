@@ -238,10 +238,8 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
             let raw = Self.decode(json)
             let blocks = (raw?.blocks ?? []).compactMap { b -> Block? in
                 let t = (b.text ?? "").trimmed
-                if b.type == "img" {
-                    guard let src = b.src, !src.isEmpty else { return nil }
-                    return Block(type: "img", text: t, src: src)
-                }
+                // 纯文本模式：图片块直接丢弃（用户要的是速度，不是图）
+                if b.type == "img" { return nil }
                 return t.isEmpty && b.type != "hr" ? nil : Block(type: b.type, text: t, src: b.src)
             }
 

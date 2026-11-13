@@ -25,7 +25,7 @@ struct FeedItem: Codable, Identifiable, Equatable {
     var titleZh: String = ""
     var brief: [String] = []
     var fetched: Bool = false // 正文是否已抓到本地
-    var imageURL: String? = nil   // 列表缩略图（来自 og:image / 正文首图）
+    var arrivedTs: Int = 0        // 本机首次发现时间（用于把最新到达的排在最前）
 }
 
 struct Block: Codable, Equatable {
@@ -107,22 +107,29 @@ final class Library {
 
     /// 合并发现结果，返回「新入库」的条目。
     /// 去重两条线：① id（URL+标题）② 规范化 URL（同一篇从 sitemap 与 RSS 各来一次时）
+    /// 新条目会写入 arrivedTs（本机首次看到的时间），列表按它排在前面。
     @discardableResult
     func merge(_ found: [FeedItem], limit: Int = 300) -> [FeedItem] {
         var seenIds = Set(items.map { $0.id })
         var seenURLs = Set(items.map { Self.normURL($0.url) })
         var fresh: [FeedItem] = []
+        let now = Int(Date().timeIntervalSince1970)
 
-        for it in found {
+        for var it in found {
             if seenIds.contains(it.id) { continue }
             let key = Self.normURL(it.url)
             if seenURLs.contains(key) { continue }
+            it.arrivedTs = now                 // 本次到达
             items.append(it)
             seenIds.insert(it.id)
             seenURLs.insert(key)
             fresh.append(it)
         }
-        items.sort { $0.ts > $1.ts }
+        // 新到的排最前；同一批内按发布时间倒序
+        items.sort { a, b in
+            if a.arrivedTs != b.arrivedTs { return a.arrivedTs > b.arrivedTs }
+            return a.ts > b.ts
+        }
         if items.count > limit { items = Array(items.prefix(limit)) }
         persistFeed()
         return fresh
@@ -178,12 +185,6 @@ final class Library {
         persistFeed()
     }
 
-    /// 列表缩略图
-    func setImage(_ id: String, _ url: String) {
-        guard let i = items.firstIndex(where: { $0.id == id }), items[i].imageURL != url else { return }
-        items[i].imageURL = url
-        persistFeed()
-    }
 
     func removeAll() {
         items = []

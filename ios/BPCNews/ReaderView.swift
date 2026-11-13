@@ -228,38 +228,6 @@ struct ReaderView: View {
             }
         case "hr":
             Hairline().padding(.vertical, 6)
-        case "img":
-            if let src = b.src, let url = URL(string: src) {
-                VStack(alignment: .leading, spacing: 7) {
-                    // 图片出血（贴齐屏幕两侧），图注留内边距 —— 贴近官网排版
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFit()
-                        case .failure:
-                            Rectangle().fill(Theme.raised).frame(height: 140)
-                        default:
-                            Rectangle().fill(Theme.raised).frame(height: 160)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-                    .padding(.horizontal, -20)
-
-                    if !b.text.isEmpty {
-                        HStack(alignment: .top, spacing: 8) {
-                            Rectangle().fill(Theme.hairline).frame(width: 2)
-                            Text(b.text)
-                                .font(.system(size: 11))
-                                .foregroundColor(Theme.inkDim)
-                                .lineSpacing(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.top, 2)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
         default:
             Text(text)
                 .font(.system(size: fontSize))
