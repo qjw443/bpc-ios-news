@@ -4,6 +4,8 @@ struct FeedView: View {
     @EnvironmentObject private var store: FeedStore
     @State private var path: [String] = []
     @State private var showSettings = false
+    @State private var showOnboarding = false
+    @AppStorage("onboarded") private var onboarded = false
 
     // 列表标题的中文化（系统端上翻译）
     @State private var titleIds: [String] = []
@@ -54,6 +56,7 @@ struct FeedView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: String.self) { ReaderView(itemId: $0) }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showOnboarding) { OnboardingView() }
             .onChange(of: scenePhase) { phase in
                 if phase == .active {
                     store.startMonitoring()
@@ -75,6 +78,7 @@ struct FeedView: View {
                     path = [id]
                     DeepLink.shared.pendingItemId = nil
                 }
+                if !onboarded { showOnboarding = true }
                 store.startMonitoring()
                 if store.items.isEmpty { store.refresh() }
                 translateTitles()
@@ -98,6 +102,7 @@ struct FeedView: View {
     /// 只翻「还没有中文」的前 25 条，交给系统端上翻译
     private func translateTitles() {
         guard Settings.zhMode == "sys" else { return }
+        guard !titleBusy else { return }        // 翻译进行中不重复触发
         let todo = Array(store.items.filter { $0.titleZh.isEmpty }.prefix(25))
         guard !todo.isEmpty else { return }
         titleIds = todo.map { $0.id }
@@ -126,11 +131,11 @@ struct FeedView: View {
         VStack(spacing: 9) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("BPC MARKETS")
-                        .font(.system(size: 17, weight: .heavy))
-                        .tracking(3.4)
+                    Text("彭博与路透新闻")
+                        .font(.system(size: 20, weight: .heavy))
+                        .tracking(1.2)
                         .foregroundColor(Theme.ink)
-                    Kicker(text: "Bloomberg · Reuters　本机直连", size: 9)
+                    Kicker(text: "BLOOMBERG · REUTERS　本机直连", size: 9)
                 }
                 Spacer()
                 HStack(spacing: 8) {

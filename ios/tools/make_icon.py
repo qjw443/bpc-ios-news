@@ -70,7 +70,7 @@ def build(serif_path: str, sans_path: str | None) -> Image.Image:
     # 底部小字（密排大写）
     if sans_path:
         f2 = ImageFont.truetype(sans_path, 40)
-        label = "B P C   M A R K E T S"
+        label = "B L O O M B E R G  ·  R E U T E R S"
         b2 = d.textbbox((0, 0), label, font=f2)
         d.text(((SIZE - (b2[2] - b2[0])) / 2 - b2[0], SIZE - 196), label, font=f2, fill=DIM)
 

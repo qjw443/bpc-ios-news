@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import UIKit
 
 struct ReaderView: View {
     let itemId: String
@@ -13,6 +14,9 @@ struct ReaderView: View {
     @State private var translating = false
     @State private var player: AVPlayer?
     @State private var elapsed = 0
+    @State private var showShare = false
+    @State private var copied = false
+    @AppStorage("reader_font") private var fontSize: Double = 16
 
     // 系统端上翻译调度
     @State private var sysTexts: [String] = []
@@ -63,8 +67,39 @@ struct ReaderView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Menu {
+                    Button {
+                        fontSize = max(13, fontSize - 1)
+                    } label: { Label("字号减小", systemImage: "textformat.size.smaller") }
+                    Button {
+                        fontSize = min(24, fontSize + 1)
+                    } label: { Label("字号增大", systemImage: "textformat.size.larger") }
+                    if let a = article {
+                        Button {
+                            UIPasteboard.general.string = ArticleShare.plainText(for: a, showOriginal: showOriginal)
+                            copied = true
+                        } label: { Label(copied ? "已复制全文" : "复制全文", systemImage: "doc.on.doc") }
+                    }
+                    Button { showWeb = true } label: {
+                        Label("原始网页（含拦截规则）", systemImage: "safari")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Theme.ink)
+                }
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 14) {
+                    Button {
+                        showShare = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(Theme.ink)
+                    }
+                    .disabled(article == nil)
                     Button {
                         showWeb = true
                     } label: {
@@ -77,6 +112,11 @@ struct ReaderView: View {
                         .foregroundColor(Theme.orange)
                         .disabled(article == nil)
                 }
+            }
+        }
+        .sheet(isPresented: $showShare) {
+            if let a = article {
+                ShareSheet(items: ArticleShare.items(for: a, showOriginal: showOriginal))
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -163,7 +203,7 @@ struct ReaderView: View {
         switch b.type {
         case "h2":
             Text(text)
-                .font(.editorial(20, weight: .semibold))
+                .font(.editorial(fontSize + 4, weight: .semibold))
                 .foregroundColor(Theme.ink)
                 .lineSpacing(4)
                 .padding(.top, 10)
@@ -222,7 +262,7 @@ struct ReaderView: View {
             }
         default:
             Text(text)
-                .font(.system(size: 16))
+                .font(.system(size: fontSize))
                 .foregroundColor(Color(red: 0.90, green: 0.90, blue: 0.89))
                 .lineSpacing(7)
                 .fixedSize(horizontal: false, vertical: true)

@@ -71,8 +71,8 @@ INFO_PLIST = {
     "UILaunchScreen": {},
     "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
     "UIUserInterfaceStyle": "Automatic",
-    "UIBackgroundModes": ["fetch", "remote-notification"],
-    "BGTaskSchedulerPermittedIdentifiers": ["$(PRODUCT_BUNDLE_IDENTIFIER).refresh"],
+    "UIBackgroundModes": ["fetch", "processing", "remote-notification"],
+    "BGTaskSchedulerPermittedIdentifiers": ["$(PRODUCT_BUNDLE_IDENTIFIER).refresh", "$(PRODUCT_BUNDLE_IDENTIFIER).processing"],
     "ITSAppUsesNonExemptEncryption": False,
     "NSAppTransportSecurity": {"NSAllowsArbitraryLoads": False},
 }

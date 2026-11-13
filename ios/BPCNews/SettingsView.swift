@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -20,6 +21,7 @@ struct SettingsView: View {
     @State private var message = ""
     @State private var busy = false
     @State private var rulesCount = 0
+    @State private var notifStatus = "…"
 
     var body: some View {
         NavigationStack {
@@ -29,6 +31,7 @@ struct SettingsView: View {
                     sourceSection
                     sourceStatusSection
                     fetchSection
+                    notifSection
                     translateSection
                     diagSection
                     dataSection
@@ -53,9 +56,51 @@ struct SettingsView: View {
                 if UserDefaults.standard.string(forKey: "zh_mode") == nil {
                     zhMode = Settings.zhMode
                 }
+                loadNotifStatus()
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func loadNotifStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { s in
+            let text: String
+            switch s.authorizationStatus {
+            case .authorized, .provisional, .ephemeral: text = "已开启"
+            case .denied: text = "已关闭（去系统设置）"
+            case .notDetermined: text = "未请求"
+            @unknown default: text = "未知"
+            }
+            DispatchQueue.main.async { notifStatus = text }
+        }
+    }
+
+    private var notifSection: some View {
+        Section {
+            LabeledContent("通知权限") {
+                Button {
+                    if let u = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(u)
+                    }
+                } label: {
+                    Text(notifStatus)
+                        .font(.system(size: 11))
+                        .foregroundColor(notifStatus == "已开启" ? Theme.inkDim : Theme.orange)
+                }
+            }
+            LabeledContent("前台轮询") {
+                Text("每 \(pollSeconds) 秒").font(.mono(11)).foregroundColor(Theme.inkDim)
+            }
+            LabeledContent("后台刷新") {
+                Text("系统调度（15–60 分钟）").font(.system(size: 11)).foregroundColor(Theme.inkDim)
+            }
+        } header: {
+            Kicker(text: "通知").padding(.bottom, 2)
+        } footer: {
+            Text("iOS 不允许普通 App 常驻后台：退到后台后由系统按电量/使用习惯调度两路任务（App 刷新 + 处理任务）。想要更及时，请保持 App 在前台，或打开 App 触发一次补推。")
+                .font(.system(size: 10)).foregroundColor(Theme.inkDim)
+        }
+        .listRowBackground(Theme.surface)
     }
 
     private var sourceSection: some View {

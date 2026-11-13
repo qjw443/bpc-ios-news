@@ -16,11 +16,13 @@
 		BFD46DC045DC69BF211A2339 /* FeedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE219516B37953FBE8D42064 /* FeedStore.swift */; };
 		A5CB77563DF438127BEE4602 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50318164A9B836DA2040E3C4 /* FeedView.swift */; };
 		A468EEFF1549F89C4E4D993A /* Library.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82489C320549AD6F958F3D45 /* Library.swift */; };
+		795FF809DE712DC5194A81B6 /* Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2882CA903E0252DC6F78DD51 /* Onboarding.swift */; };
 		19B92E13E62FCF07C9C056BC /* PaywallEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 577190596A2160141439D388 /* PaywallEngine.swift */; };
 		70834B21FE602E2A90099D2D /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B730F1B787FF8A408149B4C1 /* ReaderView.swift */; };
 		1F78A1DA50A4FACEBF2082F7 /* Rules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C31EBFBDC42F3ADE9F345F7 /* Rules.swift */; };
 		62076D008CB56279A1797816 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C202FCEF979B3769680E4D22 /* Settings.swift */; };
 		E64506B02A811191046FF3CF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F4612DED72C00E7C66967D /* SettingsView.swift */; };
+		373E489832697396E09FA762 /* Share.swift in Sources */ = {isa = PBXBuildFile; fileRef = A835D0F0100CBB608E3A3BA4 /* Share.swift */; };
 		636DBE2DB6E9E957F8BC7C36 /* Sources.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A3BBE3E38D1D7AFBD54E1A /* Sources.swift */; };
 		3C734766C5DEDD9AF3FC3930 /* SystemTranslate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F04A76FA81AC302C5668625E /* SystemTranslate.swift */; };
 		4AA65FD09FF063B1D7B17073 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 844D05EFE0893E1DC2B71FA6 /* Theme.swift */; };
@@ -41,11 +43,13 @@
 		AE219516B37953FBE8D42064 /* FeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStore.swift; sourceTree = "<group>"; };
 		50318164A9B836DA2040E3C4 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		82489C320549AD6F958F3D45 /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
+		2882CA903E0252DC6F78DD51 /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		577190596A2160141439D388 /* PaywallEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallEngine.swift; sourceTree = "<group>"; };
 		B730F1B787FF8A408149B4C1 /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
 		1C31EBFBDC42F3ADE9F345F7 /* Rules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rules.swift; sourceTree = "<group>"; };
 		C202FCEF979B3769680E4D22 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		54F4612DED72C00E7C66967D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A835D0F0100CBB608E3A3BA4 /* Share.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Share.swift; sourceTree = "<group>"; };
 		89A3BBE3E38D1D7AFBD54E1A /* Sources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources.swift; sourceTree = "<group>"; };
 		F04A76FA81AC302C5668625E /* SystemTranslate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTranslate.swift; sourceTree = "<group>"; };
 		844D05EFE0893E1DC2B71FA6 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -90,11 +94,13 @@
 				AE219516B37953FBE8D42064 /* FeedStore.swift */,
 				50318164A9B836DA2040E3C4 /* FeedView.swift */,
 				82489C320549AD6F958F3D45 /* Library.swift */,
+				2882CA903E0252DC6F78DD51 /* Onboarding.swift */,
 				577190596A2160141439D388 /* PaywallEngine.swift */,
 				B730F1B787FF8A408149B4C1 /* ReaderView.swift */,
 				1C31EBFBDC42F3ADE9F345F7 /* Rules.swift */,
 				C202FCEF979B3769680E4D22 /* Settings.swift */,
 				54F4612DED72C00E7C66967D /* SettingsView.swift */,
+				A835D0F0100CBB608E3A3BA4 /* Share.swift */,
 				89A3BBE3E38D1D7AFBD54E1A /* Sources.swift */,
 				F04A76FA81AC302C5668625E /* SystemTranslate.swift */,
 				844D05EFE0893E1DC2B71FA6 /* Theme.swift */,
@@ -195,11 +201,13 @@
 				BFD46DC045DC69BF211A2339 /* FeedStore.swift in Sources */,
 				A5CB77563DF438127BEE4602 /* FeedView.swift in Sources */,
 				A468EEFF1549F89C4E4D993A /* Library.swift in Sources */,
+				795FF809DE712DC5194A81B6 /* Onboarding.swift in Sources */,
 				19B92E13E62FCF07C9C056BC /* PaywallEngine.swift in Sources */,
 				70834B21FE602E2A90099D2D /* ReaderView.swift in Sources */,
 				1F78A1DA50A4FACEBF2082F7 /* Rules.swift in Sources */,
 				62076D008CB56279A1797816 /* Settings.swift in Sources */,
 				E64506B02A811191046FF3CF /* SettingsView.swift in Sources */,
+				373E489832697396E09FA762 /* Share.swift in Sources */,
 				636DBE2DB6E9E957F8BC7C36 /* Sources.swift in Sources */,
 				3C734766C5DEDD9AF3FC3930 /* SystemTranslate.swift in Sources */,
 				4AA65FD09FF063B1D7B17073 /* Theme.swift in Sources */,

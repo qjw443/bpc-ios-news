@@ -10,6 +10,7 @@ final class ThumbnailLoader {
     static let shared = ThumbnailLoader()
 
     private var inFlight = Set<String>()
+    private var attempted = Set<String>()      // 本次启动内试过就不再试，避免每轮刷新重复请求
     private let lock = NSLock()
     var onUpdate: (() -> Void)?
 
@@ -31,11 +32,12 @@ final class ThumbnailLoader {
         let todo = items.filter { $0.imageURL == nil && !$0.url.isEmpty }.prefix(limit)
         for item in todo {
             lock.lock()
-            if inFlight.contains(item.id) {
+            if inFlight.contains(item.id) || attempted.contains(item.id) {
                 lock.unlock()
                 continue
             }
             inFlight.insert(item.id)
+            attempted.insert(item.id)
             lock.unlock()
 
             DispatchQueue.global(qos: .utility).async { [weak self] in
