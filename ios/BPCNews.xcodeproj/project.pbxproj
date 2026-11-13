@@ -24,6 +24,7 @@
 		4AA65FD09FF063B1D7B17073 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 844D05EFE0893E1DC2B71FA6 /* Theme.swift */; };
 		33639508B4078A9E640221B5 /* Translate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 707A5332C7F37533EAD62255 /* Translate.swift */; };
 		437AE92E09FD43E058272510 /* WebReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BE2D93A8FB7F76B5A1F6367 /* WebReaderView.swift */; };
+		04A7814E4EEC70DE7D6C41B1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8D562B3E40B6C9EC53F38F07 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +48,7 @@
 		1D38637870287646A60BB987 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		840A3FB2571B05F6DFCE28F1 /* BPCNews.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BPCNews.entitlements; sourceTree = "<group>"; };
 		A97C29AD63741CF438998CE6 /* BPCNews.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BPCNews.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D562B3E40B6C9EC53F38F07 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,6 +92,7 @@
 				5BE2D93A8FB7F76B5A1F6367 /* WebReaderView.swift */,
 				1D38637870287646A60BB987 /* Info.plist */,
 				840A3FB2571B05F6DFCE28F1 /* BPCNews.entitlements */,
+				8D562B3E40B6C9EC53F38F07 /* Assets.xcassets */,
 			);
 			path = BPCNews;
 			sourceTree = "<group>";
@@ -160,6 +163,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				04A7814E4EEC70DE7D6C41B1 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -254,6 +258,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = BPCNews/BPCNews.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -277,6 +282,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = BPCNews/BPCNews.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				GENERATE_INFOPLIST_FILE = NO;

@@ -82,26 +82,23 @@ struct SettingsView: View {
 
     private var fetchSection: some View {
         Section {
-            Toggle(isOn: $autoFetch) {
-                Text("自动预热正文").foregroundColor(Theme.ink)
-            }.tint(Theme.orange)
             Button {
                 store.refresh(notify: false)
                 message = "已触发一轮发现"
             } label: {
-                Text("立即抓一轮").foregroundColor(Theme.orange)
+                Text("立即抓一轮标题").foregroundColor(Theme.orange)
             }
             LabeledContent("最近状态") {
                 Text(store.status.isEmpty ? "—" : store.status)
                     .font(.system(size: 11)).foregroundColor(Theme.inkDim)
             }
-            LabeledContent("待取正文") {
+            LabeledContent("待读条数") {
                 Text("\(store.pendingCount) 条").font(.mono(11)).foregroundColor(Theme.inkDim)
             }
         } header: {
-            Kicker(text: "抓取").padding(.bottom, 2)
+            Kicker(text: "发现").padding(.bottom, 2)
         } footer: {
-            Text("发现走 Google News RSS（分钟级）。iOS 后台刷新由系统调度，通常 15–60 分钟一次；App 在前台时每 60 秒一轮。")
+            Text("这里只拉标题流（Google News，分钟级）。正文只在你点开某一条时才在本机抓取，不会后台批量抓。iOS 后台刷新由系统调度，前台每 60 秒一轮。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)

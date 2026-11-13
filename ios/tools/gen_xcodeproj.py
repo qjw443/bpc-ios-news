@@ -27,6 +27,8 @@ PROJ = IOS / "BPCNews.xcodeproj"
 
 TARGET_NAME = "BPCNews"
 SWIFT_FILES = sorted(p.name for p in SRC.glob("*.swift"))
+ASSET_CATALOG = "Assets.xcassets"
+HAS_ASSETS = (SRC / ASSET_CATALOG).is_dir()
 
 
 def uid(label: str) -> str:
@@ -51,6 +53,8 @@ U = {
     "target_release": uid("target_release"),
     "info_ref": uid("info_ref"),
     "ent_ref": uid("ent_ref"),
+    "assets_ref": uid("assets_ref"),
+    "assets_build": uid("assets_build"),
 }
 
 INFO_PLIST = {
@@ -97,6 +101,9 @@ def build_pbxproj(bundle_id: str) -> str:
     for f in SWIFT_FILES:
         a("\t\t%s /* %s in Sources */ = {isa = PBXBuildFile; fileRef = %s /* %s */; };"
           % (bf[f], f, fr[f], f))
+    if HAS_ASSETS:
+        a("\t\t%s /* %s in Resources */ = {isa = PBXBuildFile; fileRef = %s /* %s */; };"
+          % (U["assets_build"], ASSET_CATALOG, U["assets_ref"], ASSET_CATALOG))
     a("/* End PBXBuildFile section */")
 
     # ---------- PBXFileReference ----------
@@ -111,6 +118,9 @@ def build_pbxproj(bundle_id: str) -> str:
       'path = BPCNews.entitlements; sourceTree = "<group>"; };' % U["ent_ref"])
     a('\t\t%s /* BPCNews.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; '
       'includeInIndex = 0; path = BPCNews.app; sourceTree = BUILT_PRODUCTS_DIR; };' % U["product_ref"])
+    if HAS_ASSETS:
+        a('\t\t%s /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; '
+          'path = %s; sourceTree = "<group>"; };' % (U["assets_ref"], ASSET_CATALOG))
     a("/* End PBXFileReference section */")
 
     # ---------- PBXFrameworksBuildPhase ----------
@@ -143,6 +153,8 @@ def build_pbxproj(bundle_id: str) -> str:
         a("\t\t\t\t%s /* %s */," % (fr[f], f))
     a("\t\t\t\t%s /* Info.plist */," % U["info_ref"])
     a("\t\t\t\t%s /* BPCNews.entitlements */," % U["ent_ref"])
+    if HAS_ASSETS:
+        a("\t\t\t\t%s /* %s */," % (U["assets_ref"], ASSET_CATALOG))
     a("\t\t\t);")
     a("\t\t\tpath = BPCNews;")
     a("\t\t\tsourceTree = \"<group>\";")
@@ -221,6 +233,8 @@ def build_pbxproj(bundle_id: str) -> str:
     a("\t\t\tisa = PBXResourcesBuildPhase;")
     a("\t\t\tbuildActionMask = 2147483647;")
     a("\t\t\tfiles = (")
+    if HAS_ASSETS:
+        a("\t\t\t\t%s /* %s in Resources */," % (U["assets_build"], ASSET_CATALOG))
     a("\t\t\t);")
     a("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
     a("\t\t};")
@@ -283,6 +297,7 @@ def build_pbxproj(bundle_id: str) -> str:
         a("\t\t\tbuildSettings = {")
         a("\t\t\t\tCODE_SIGN_ENTITLEMENTS = BPCNews/BPCNews.entitlements;")
         a("\t\t\t\tCODE_SIGN_STYLE = Automatic;")
+        a("\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;")
         a("\t\t\t\tCURRENT_PROJECT_VERSION = 1;")
         a("\t\t\t\tENABLE_BITCODE = NO;")
         a("\t\t\t\tGENERATE_INFOPLIST_FILE = NO;")

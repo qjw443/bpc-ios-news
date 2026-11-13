@@ -5,10 +5,31 @@ struct FeedView: View {
     @State private var path: [String] = []
     @State private var showSettings = false
 
+    // 列表标题的中文化（系统端上翻译）
+    @State private var titleIds: [String] = []
+    @State private var titleTexts: [String] = []
+    @State private var titleResults: [String] = []
+    @State private var titleBusy = false
+    @State private var titleError = ""
+    @State private var titleNonce = 0
+
     private let ticker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
 
     var body: some View {
+        SystemTranslateBox(texts: titleTexts,
+                           results: $titleResults,
+                           busy: $titleBusy,
+                           errorText: $titleError,
+                           nonce: titleNonce) {
+            content
+        }
+        .onChange(of: titleResults) { new in
+            applyTitles(new)
+        }
+    }
+
+    private var content: some View {
         NavigationStack(path: $path) {
             ZStack {
                 Theme.bg.ignoresSafeArea()
@@ -33,7 +54,10 @@ struct FeedView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: String.self) { ReaderView(itemId: $0) }
             .sheet(isPresented: $showSettings) { SettingsView() }
-            .onReceive(ticker) { _ in store.refresh() }
+            .onReceive(ticker) { _ in
+                store.refresh()
+                translateTitles()
+            }
             .onReceive(openItem) { note in
                 if let id = note.object as? String {
                     path = [id]
@@ -46,6 +70,7 @@ struct FeedView: View {
                     DeepLink.shared.pendingItemId = nil
                 }
                 if store.items.isEmpty { store.refresh() }
+                translateTitles()
             }
         }
         .tint(Theme.ink)
@@ -56,6 +81,34 @@ struct FeedView: View {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             store.refresh { cont.resume() }
         }
+        translateTitles()
+    }
+
+    // MARK: - 标题中文化
+
+    /// 只翻「还没有中文」的前 25 条，交给系统端上翻译
+    private func translateTitles() {
+        guard Settings.zhMode == "sys" else { return }
+        let todo = Array(store.items.filter { $0.titleZh.isEmpty }.prefix(25))
+        guard !todo.isEmpty else { return }
+        titleIds = todo.map { $0.id }
+        titleTexts = todo.map { $0.title }
+        titleResults = []
+        titleBusy = true
+        titleNonce += 1
+    }
+
+    private func applyTitles(_ zh: [String]) {
+        guard !titleIds.isEmpty, zh.count == titleIds.count else { return }
+        for (i, id) in titleIds.enumerated() where i < zh.count {
+            let t = zh[i]
+            if !t.isEmpty { Library.shared.setTitleZh(id, t) }
+        }
+        store.items = Library.shared.items
+        titleIds = []
+        titleTexts = []
+        titleResults = []
+        titleBusy = false
     }
 
     // MARK: 报头

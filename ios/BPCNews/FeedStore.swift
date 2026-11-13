@@ -51,6 +51,11 @@ final class FeedStore: ObservableObject {
             var mapped: [FeedItem] = []
             for f in found where enabled.contains(f.site.rawValue) {
                 let title = Self.cleanTitle(f.title)
+                // 过滤 Google News 里的垃圾条目：只有站点名、过短、栏目页
+                let low = title.lowercased()
+                if title.count < 16 { continue }
+                if ["bloomberg", "reuters", "bloomberg.com", "reuters.com"].contains(low) { continue }
+                if low.hasPrefix("transcript") || low.hasPrefix("watch:") || low.hasPrefix("listen") { continue }
                 let id = Hash.short(f.link + "|" + title)
                 var item = FeedItem(id: id,
                                     site: f.site,
@@ -73,13 +78,8 @@ final class FeedStore: ObservableObject {
             }
             if notify && !fresh.isEmpty { self.notifyNew(fresh) }
             completion?()
-
-            // 自动预热最新几条的正文，点开即读
-            if Settings.autoFetch {
-                for item in fresh.prefix(3) {
-                    self.fetch(item: item, silent: true)
-                }
-            }
+            // 注意：这里刻意「不」自动抓正文。
+            // 165 条列表只是标题流；正文只在用户点开某一条时才抓（省流量、少被墙、少触发风控）。
         }
     }
 
@@ -157,19 +157,45 @@ final class FeedStore: ObservableObject {
     // MARK: - 本地通知（无 APNs，全部在设备上）
 
     private func notifyNew(_ fresh: [FeedItem]) {
-        let content = UNMutableNotificationContent()
-        if fresh.count == 1 {
-            content.title = fresh[0].titleZh.isEmpty ? fresh[0].title : fresh[0].titleZh
-            content.body = fresh[0].site.label + " · 刚刚"
-        } else {
-            content.title = "财经速递 · \(fresh.count) 条新消息"
-            content.body = fresh.prefix(2).map { $0.title }.joined(separator: "／")
+        guard let first = fresh.first else { return }
+
+        // 推送文案优先用已翻译的标题；没有就当场翻：
+        //   有大模型 Key → 走 LLM（后台也能用）；否则用离线词典兜底。
+        func deliver(_ zhTitle: String) {
+            let content = UNMutableNotificationContent()
+            if fresh.count == 1 {
+                content.title = zhTitle.isEmpty ? Self.zhFallback(first) : zhTitle
+                content.body = first.site.label + " · 刚刚"
+            } else {
+                content.title = "财经速递 · \(fresh.count) 条新消息"
+                content.body = fresh.prefix(2)
+                    .map { $0.titleZh.isEmpty ? Self.zhFallback($0) : $0.titleZh }
+                    .joined(separator: "／")
+            }
+            content.sound = .default
+            content.userInfo = ["itemId": first.id]
+            let req = UNNotificationRequest(identifier: UUID().uuidString,
+                                            content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
         }
-        content.sound = .default
-        content.userInfo = ["itemId": fresh[0].id]
-        let req = UNNotificationRequest(identifier: UUID().uuidString,
-                                        content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+
+        if !first.titleZh.isEmpty {
+            deliver(first.titleZh)
+        } else if Settings.zhMode == "llm" && !Settings.llmKey.isEmpty {
+            Translator.translateTitle(first.title) { zh in
+                DispatchQueue.main.async { deliver(zh) }
+            }
+        } else {
+            deliver("")
+        }
+    }
+
+    /// 没有系统/大模型翻译时的兜底：离线词典
+    static func zhFallback(_ item: FeedItem) -> String {
+        let zh = Dict.translate(item.title)
+        // 如果几乎没替换成功（中文字符很少），干脆给原文，避免误导
+        let hanzi = zh.unicodeScalars.filter { $0.value >= 0x4E00 && $0.value <= 0x9FFF }.count
+        return hanzi >= 6 ? zh : item.title
     }
 
     // MARK: - 工具

@@ -140,6 +140,13 @@ final class Library {
         persistFeed()
     }
 
+    /// 标题中文化（供列表页翻译回填）
+    func setTitleZh(_ id: String, _ zh: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }), items[i].titleZh != zh else { return }
+        items[i].titleZh = zh
+        persistFeed()
+    }
+
     func removeAll() {
         items = []
         articles = [:]

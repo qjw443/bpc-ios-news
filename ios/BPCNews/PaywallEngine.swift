@@ -106,6 +106,29 @@ final class PaywallEngine: NSObject {
             group.notify(queue: .main) { done() }
         }
     }
+
+    /// Google 的「在你继续谷歌之前」同意页会吃掉整个跳转。
+    /// 预置 CONSENT / SOCS 两个 cookie，Google 就会跳过同意页直接跳原文。
+    func seedGoogleConsent(_ webView: WKWebView, done: @escaping () -> Void) {
+        let store = webView.configuration.websiteDataStore
+        let pairs = [("CONSENT", "YES+cb"), ("SOCS", "CAI")]
+        let group = DispatchGroup()
+        for (name, value) in pairs {
+            let props: [HTTPCookiePropertyKey: Any] = [
+                .name: name,
+                .value: value,
+                .domain: ".google.com",
+                .path: "/",
+                .secure: "TRUE",
+                .expires: Date().addingTimeInterval(86400 * 365),
+            ]
+            if let cookie = HTTPCookie(properties: props) {
+                group.enter()
+                store.httpCookieStore.setCookie(cookie) { group.leave() }
+            }
+        }
+        group.notify(queue: .main) { done() }
+    }
 }
 
 // MARK: - 抓取结果
@@ -178,7 +201,15 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
             self.hardTimeout = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 40, execute: work)
 
-            wv.load(PaywallEngine.shared.request(for: url, site: site))
+            let req = PaywallEngine.shared.request(for: url, site: site)
+            if (url.host ?? "").contains("google.com") {
+                // 先塞 consent cookie，再加载，避免停在同意页
+                PaywallEngine.shared.seedGoogleConsent(wv) {
+                    wv.load(req)
+                }
+            } else {
+                wv.load(req)
+            }
         }
     }
 
@@ -186,6 +217,13 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         lastFinalURL = webView.url?.absoluteString ?? articleURL.absoluteString
+        // Google 同意页：识别出来就直接判失败，别把同意条款当正文
+        let pageTitle = webView.title ?? ""
+        if pageTitle.contains("Before you continue") || pageTitle.contains("在你继续")
+            || lastFinalURL.contains("consent.google.com") {
+            finish(.failure(FetchError.loadFailed("Google 同意页未跳过")))
+            return
+        }
         // 还停在 Google 跳转页：它是个 JS 应用（600KB），要等它自己跳到发布方。
         // 不能立刻判死 —— 真机上用户点 Google News 链接就是靠这套 JS 跳转的。
         if lastFinalURL.contains("news.google.com") {

@@ -85,6 +85,18 @@ enum Rules {
           });
           // ⑥ 广告位顺手清掉（不影响正文）
           document.querySelectorAll('div[data-testid="ResponsiveAdSlot"],div[data-testid="Dianomi"],div[data-testid="article-subscriber-gate"]').forEach(function(e){e.remove();});
+          // ⑦ 同意/隐私弹窗：能点「全部接受」就点，避免被挡在条款页
+          var cands = document.querySelectorAll('button,[role="button"],a');
+          for (var ci = 0; ci < cands.length; ci++) {
+            var tx = (cands[ci].innerText || '').trim();
+            if (/^(accept all|allow all|i agree|agree to all|全部接受|全部同意|同意|接受全部)$/i.test(tx)) {
+              try { cands[ci].click(); } catch (e) {}
+              break;
+            }
+          }
+          document.querySelectorAll('#onetrust-consent-sdk,[id*="cookie-banner"],[class*="cookie-banner"],[aria-label*="cookie" i]').forEach(function(e){
+            if (e.offsetHeight > 80) e.remove();
+          });
         }catch(e){}
       }
       clean();
