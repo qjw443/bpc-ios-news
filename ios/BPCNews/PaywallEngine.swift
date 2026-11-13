@@ -103,11 +103,12 @@ final class PaywallEngine: NSObject {
             }
             group.notify(queue: .main) {
                 let types = WKWebsiteDataStore.allWebsiteDataTypes()
-                // 新版 SDK 把 dataRecords(ofTypes:) 导入了 async 重载，
-                // 这里必须显式用 completionHandler 版本
-                store.dataRecords(ofTypes: types) { records in
-                    store.removeData(ofTypes: types, for: records, completionHandler: done)
-                }
+                // 新版 SDK 把 dataRecords(ofTypes:) 导入了 async 重载，尾随闭包会被判为多余参数，
+                // 这里显式写 completionHandler: 选择带回调的版本
+                store.dataRecords(ofTypes: types, completionHandler: { records in
+                    store.removeData(ofTypes: types, for: records,
+                                     completionHandler: { done() })
+                })
             }
         }
     }
