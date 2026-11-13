@@ -134,7 +134,7 @@ struct SettingsView: View {
         } header: {
             Kicker(text: "中文").padding(.bottom, 2)
         } footer: {
-            Text("「系统端上翻译」= Apple 内置模型（iOS 17.4+），首次会弹语言包下载，之后完全离线、不需要 Key。低版本自动回落到词典（\(Dict.entryCount) 条术语替换）。")
+            Text("「系统端上翻译」= Apple 内置模型（iOS 18+），首次会弹语言包下载，之后完全离线、不需要 Key。低版本自动回落到词典（\(Dict.entryCount) 条术语替换）。")
                 .font(.system(size: 10)).foregroundColor(Theme.inkDim)
         }
         .listRowBackground(Theme.surface)

@@ -30,7 +30,7 @@ enum Settings {
         let v = UserDefaults.standard.string(forKey: "zh_mode") ?? ""
         if !v.isEmpty { return v }
         // 默认：能用系统端上翻译就用它（真翻译、离线、无 Key）
-        if #available(iOS 17.4, *) { return "sys" }
+        if #available(iOS 18.0, *) { return "sys" }
         return "dict"
     }
     static var llmKey: String { UserDefaults.standard.string(forKey: "llm_key") ?? "" }

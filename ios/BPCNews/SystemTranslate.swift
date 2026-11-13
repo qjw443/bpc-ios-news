@@ -3,11 +3,11 @@ import SwiftUI
 import Translation
 #endif
 
-/// Apple 端上翻译（iOS 17.4+）：系统内置模型，纯离线、不需要 Key、不经过任何服务器。
+/// Apple 端上翻译（iOS 18+）：系统内置模型，纯离线、不需要 Key、不经过任何服务器。
 /// 首次使用会由系统弹出「下载语言包」，之后完全本地运行。
 ///
-/// iOS 17.3 及以下没有这个框架，自动回落到内置词典（Dict）。
-@available(iOS 17.4, *)
+/// iOS 17.x 及以下没有这个框架，自动回落到内置词典（Dict）。
+@available(iOS 18.0, *)
 private struct SystemTranslateModifier: ViewModifier {
     let texts: [String]
     @Binding var results: [String]
@@ -60,7 +60,7 @@ private struct SystemTranslateModifier: ViewModifier {
     }
 }
 
-/// 运行时决定用不用系统翻译（iOS 17.4+ 才挂载 modifier，低版本原样返回内容）
+/// 运行时决定用不用系统翻译（iOS 18+ 才挂载 modifier，低版本原样返回内容）
 struct SystemTranslateBox<Content: View>: View {
     let texts: [String]
     @Binding var results: [String]
@@ -84,7 +84,7 @@ struct SystemTranslateBox<Content: View>: View {
     }
 
     var body: some View {
-        if #available(iOS 17.4, *) {
+        if #available(iOS 18.0, *) {
             content()
                 .modifier(SystemTranslateModifier(texts: texts, results: $results,
                                                   busy: $busy, errorText: $errorText,
@@ -97,7 +97,7 @@ struct SystemTranslateBox<Content: View>: View {
 
 enum SystemTranslate {
     static var isAvailable: Bool {
-        if #available(iOS 17.4, *) { return true }
+        if #available(iOS 18.0, *) { return true }
         return false
     }
 }
