@@ -116,6 +116,30 @@ final class TranslateService {
         }
     }
 
+    /// 备用端点：MyMemory（Google 端点被墙/限流时兜底，免费无 Key）
+    private func fetchMyMemory(_ text: String, done: @escaping (String?) -> Void) {
+        guard text.count <= 480 else { done(nil); return }
+        let q = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        guard let url = URL(string: "https://api.mymemory.translated.net/get?q=\(q)&langpair=en|zh-CN") else {
+            done(nil)
+            return
+        }
+        var req = URLRequest(url: url, timeoutInterval: 10)
+        req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+                     forHTTPHeaderField: "User-Agent")
+        session.dataTask(with: req) { data, _, _ in
+            guard let data = data,
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let rd = obj["responseData"] as? [String: Any],
+                  let t = rd["translatedText"] as? String,
+                  !t.isEmpty else {
+                done(nil)
+                return
+            }
+            done(t)
+        }.resume()
+    }
+
     /// 单句在线翻译（免费公共端点，无需 Key；需网络可达）
     private func fetchOnline(_ text: String, done: @escaping (String?) -> Void) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
