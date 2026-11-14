@@ -48,6 +48,7 @@ final class FeedStore: ObservableObject {
 
     /// 前台定时轮询 + 网络恢复立即刷 + 回到前台立即刷
     func startMonitoring() {
+        startTranslateEngine()          // 翻译与「自动监控」开关无关，永远启动
         guard Settings.autoMonitor else { return }
         if timer == nil {
             let t = Timer(timeInterval: TimeInterval(Settings.pollSeconds), repeats: true) {
@@ -67,7 +68,6 @@ final class FeedStore: ObservableObject {
             m.start(queue: DispatchQueue(label: "bpc.net.monitor"))
             pathMonitor = m
         }
-        startTranslateEngine()
     }
 
     func stopMonitoring() {
@@ -95,6 +95,8 @@ final class FeedStore: ObservableObject {
         Library.shared.load()
         Library.shared.migrate()          // 清掉旧版第三方源留下的脏条目
         items = Library.shared.items
+        startTranslateEngine()
+        translatePendingTitles()
         status = "规则编译中…"
         PaywallEngine.shared.prepare { [weak self] in
             self?.status = "规则就绪（\(PaywallEngine.shared.compiledCount) 条）"
@@ -192,6 +194,7 @@ final class FeedStore: ObservableObject {
                 if skippedOld > 0 { s += " · 滤除旧闻 \(skippedOld)" }
                 if !fresh.isEmpty {
                     self.newItemsToken += 1
+                    self.titleTried = [:]          // 给所有条目新的翻译机会
                     self.translatePendingTitles()
                 }
                 self.status = s
@@ -225,17 +228,24 @@ final class FeedStore: ObservableObject {
     @Published var translating = false
     private var titleTried: [String: Int] = [:]     // id -> 已尝试次数
     private var translateTimer: Timer?
+    private var translateStartedAt: Date?
 
     /// 把还没中文的标题翻一批；由 5 秒定时器 + 新稿入库事件驱动
     func translatePendingTitles() {
+        // 看门狗：上一次翻译超过 30 秒仍未复位 → 强制复位（防止回调丢失导致永久停摆）
+        if translating, let t0 = translateStartedAt, Date().timeIntervalSince(t0) > 30 {
+            translating = false
+            translateStartedAt = nil
+        }
         guard !translating else { return }
 
         let pool = items.filter { it in
-            !TextQuality.isTranslated(it.titleZh) && (titleTried[it.id] ?? 0) < 3
+            !TextQuality.isTranslated(it.titleZh) && (titleTried[it.id] ?? 0) < 5
         }
         guard !pool.isEmpty else { return }
 
         translating = true
+        translateStartedAt = Date()
         let batch = Array(pool.prefix(40))
         for it in batch { titleTried[it.id, default: 0] += 1 }
         if titleTried.count > 1500 { titleTried = [:] }
@@ -254,13 +264,14 @@ final class FeedStore: ObservableObject {
             }
             if appliedAny { self.items = Library.shared.items }
             self.translating = false
+            self.translateStartedAt = nil
             self.notifyPending()
         }
     }
 
     private func startTranslateEngine() {
         guard translateTimer == nil else { return }
-        let t = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
             self?.translatePendingTitles()
         }
         RunLoop.main.add(t, forMode: .common)
