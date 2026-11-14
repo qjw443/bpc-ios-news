@@ -310,7 +310,7 @@ final class ResearchStore: ObservableObject {
                 t = t.replacingOccurrences(of: "%20", with: " ")
                     .replacingOccurrences(of: "%2C", with: ",")
                     .replacingOccurrences(of: "%3A", with: ":")
-                    .replacingOccurrences(of: "\s+", with: " ", options: .regularExpression)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard TextQuality.isTranslatedLoose(t), t != it.title else { continue }
                 if let idx = self.items.firstIndex(where: { $0.id == it.id }) {
