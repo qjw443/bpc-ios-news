@@ -20,7 +20,14 @@ final class TranslateService {
     init() {
         if let d = try? Data(contentsOf: Self.cacheURL),
            let m = try? JSONDecoder().decode([String: String].self, from: d) {
-            diskCache = m
+            // 清掉旧版本写进来的 URL 编码脏译文（%20 / %2C 等）
+            let clean = m.filter { !$0.value.contains("%20") && !$0.value.contains("%2C")
+                && !$0.value.contains("%3A") }
+            diskCache = clean
+            if clean.count != m.count {
+                try? Data().write(to: Self.cacheURL)   // 丢弃整个旧缓存，重建
+                diskCache = [:]
+            }
         }
     }
 
@@ -49,6 +56,17 @@ final class TranslateService {
     }()
 
     /// 翻译一组文本（保持顺序）。任一失败则该项回退词典。
+    /// 统一净化译文：解 URL 编码、压空白、去服务商告警
+    private static func sanitize(_ raw: String) -> String {
+        var t = raw
+        if t.contains("%20") || t.contains("%2C") || t.contains("%3A") || t.contains("%E") {
+            t = t.removingPercentEncoding ?? t
+        }
+        t = t.replacingOccurrences(of: "+", with: " ")
+        t = t.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 归一化缓存键：压空白、去首尾标点差异，提高命中率
     private static func key(_ s: String) -> String {
         s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -136,14 +154,12 @@ final class TranslateService {
                 done(nil)
                 return
             }
-            // 关键：MyMemory 返回的是 URL 编码文本（空格会变成 %20），必须解码
-            var t = raw.removingPercentEncoding ?? raw
-            t = t.replacingOccurrences(of: "+", with: " ")
-            if t.lowercased().contains("mymemory warning") || t.contains("QUERY LENGTH LIMIT") {
+            if raw.lowercased().contains("mymemory warning") || raw.contains("QUERY LENGTH LIMIT") {
                 done(nil)
                 return
             }
-            done(t.trimmingCharacters(in: .whitespacesAndNewlines))
+            let t = Self.sanitize(raw)
+            done(t.isEmpty ? nil : t)
         }.resume()
     }
 
@@ -177,7 +193,7 @@ final class TranslateService {
             for seg in segs {
                 if let s = seg.first as? String { parts.append(s) }
             }
-            let zh = parts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            let zh = Self.sanitize(parts.joined())
             done(zh.isEmpty ? nil : zh)
         }.resume()
     }

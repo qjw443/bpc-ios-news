@@ -20,17 +20,19 @@ struct ResearchItem: Identifiable, Hashable {
         case "analyst": return "分析师"
         case "market": return "市场"
         case "paper": return "论文"
+        case "pdf": return "PDF"
         default: return "研究"
         }
     }
 }
 
 enum ResearchKind: String, CaseIterable, Identifiable {
-    case all, bank, asset, filing, analyst, market, paper
+    case all, pdf, bank, asset, filing, analyst, market, paper
     var id: String { rawValue }
     var title: String {
         switch self {
         case .all: return "全部"
+        case .pdf: return "PDF研报"
         case .bank: return "投行"
         case .asset: return "资管"
         case .filing: return "披露"
@@ -121,7 +123,11 @@ final class ResearchStore: ObservableObject {
             }
         }
 
-        // ④ 量化论文
+        // ④ 美联储/纽联储 PDF 研究
+        group.enter()
+        fetchNYFed { list in add(list); group.leave() }
+
+        // ⑤ 量化论文
         group.enter()
         fetchArxiv { list in add(list); group.leave() }
 
@@ -258,6 +264,40 @@ final class ResearchStore: ObservableObject {
         }.resume()
     }
 
+    // MARK: 纽约联储 Staff Reports（真 PDF 直链）
+
+    private func fetchNYFed(done: @escaping ([ResearchItem]) -> Void) {
+        guard let url = URL(string: "https://www.newyorkfed.org/research/staff_reports") else {
+            done([]); return
+        }
+        var req = URLRequest(url: url, timeoutInterval: 22)
+        req.setValue(browserUA, forHTTPHeaderField: "User-Agent")
+        session.dataTask(with: req) { data, _, _ in
+            guard let data = data, let html = String(data: data, encoding: .utf8) else {
+                done([]); return
+            }
+            var out: [ResearchItem] = []
+            var seen = Set<String>()
+            // 列表里出现 sr12345 → 直链 /medialibrary/media/research/staff_reports/sr12345.pdf
+            let re = try? NSRegularExpression(pattern: #"staff_reports/sr(\d{3,5})"#, options: [])
+            let ns = html as NSString
+            re?.enumerateMatches(in: html, options: [], range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+                guard let m = m, m.numberOfRanges > 1,
+                      let r = Range(m.range(at: 1), in: html) else { return }
+                let num = String(html[r])
+                if seen.contains(num) { return }
+                seen.insert(num)
+                let pdf = "https://www.newyorkfed.org/medialibrary/media/research/staff_reports/sr\(num).pdf"
+                out.append(ResearchItem(id: "nyfed_\(num)",
+                                        title: "NY Fed Staff Report SR\(num)",
+                                        org: "Federal Reserve Bank of New York",
+                                        date: Self.todayString(),
+                                        url: pdf, kind: "pdf"))
+            }
+            done(Array(out.prefix(12)))
+        }.resume()
+    }
+
     // MARK: arXiv
 
     private func fetchArxiv(done: @escaping ([ResearchItem]) -> Void) {
@@ -278,8 +318,10 @@ final class ResearchStore: ObservableObject {
                 let idURL = Self.xml(chunk, "id") ?? ""
                 let published = Self.xml(chunk, "published") ?? ""
                 guard title.count > 15, !idURL.isEmpty else { continue }
+                let pdf = idURL.replacingOccurrences(of: "http://arxiv.org/abs/", with: "https://arxiv.org/pdf/")
                 out.append(ResearchItem(id: "ax_" + idURL.md5ish, title: title, org: "arXiv q-fin",
-                                        date: String(published.prefix(10)), url: idURL, kind: "paper"))
+                                        date: String(published.prefix(10)),
+                                        url: pdf, kind: "pdf"))
             }
             done(out)
         }.resume()
@@ -492,6 +534,7 @@ struct ResearchView: View {
 
     private func tagColor(_ kind: String) -> Color {
         switch kind {
+        case "pdf": return Color(red: 0.72, green: 0.18, blue: 0.18)
         case "bank": return Color(red: 0.12, green: 0.32, blue: 0.72)
         case "asset": return Color(red: 0.10, green: 0.48, blue: 0.42)
         case "filing": return Color(red: 0.45, green: 0.30, blue: 0.62)
