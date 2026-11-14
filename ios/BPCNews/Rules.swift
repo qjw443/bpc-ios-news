@@ -230,7 +230,6 @@ enum Rules {
       var out={title:'',blocks:[],summary:[],audio:'',via:'',walls:[]};
       function clean(s){ return (s||'').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').trim(); }
 
-      // 站点样板 / 页脚 / 公司简介：一旦命中就丢弃（路透 footer 曾整段被当正文）
       function boiler(s){
         return /^(our standards|reporting by|editing by|additional reporting|make sense of|register now|opens new tab|read more|advertisement|sign up|subscribe|follow us)/i.test(s)
           || /thomson reuters trust principle/i.test(s)
@@ -240,15 +239,18 @@ enum Rules {
           || /^(汤森路透|我们的标准|路透社是汤森路透|记者|编辑|注册|所有报价)/.test(s);
       }
 
-      // ① 先删掉页脚 / 导航 / 相关阅读 / 订阅框，避免污染正文
+      // ① 删页脚 / 导航 / 相关阅读 / 订阅框 / 遮罩，并解除裁剪
       try{
         var junk = 'footer,nav,aside,[role="navigation"],[role="contentinfo"],'
           + '[class*="footer"],[class*="Footer"],[data-testid*="footer"],'
           + '[class*="related"],[class*="Related"],[class*="newsletter"],'
           + '[class*="subscribe"],[class*="promo"],[data-testid*="paywall"],'
           + '[class*="regwall"],[class*="Regwall"],[class*="Paywall"]';
-        document.querySelectorAll(junk).forEach(function(e){ e.remove(); });
-        // 解除裁剪
+        var removed = document.querySelectorAll(junk);
+        for (var ri=0; ri<removed.length; ri++){
+          if (removed[ri].offsetHeight > 40) out.walls.push((removed[ri].className||'').toString().slice(0,40));
+          removed[ri].remove();
+        }
         document.querySelectorAll('div,section,article').forEach(function(e){
           var cs=getComputedStyle(e);
           if(cs.maxHeight && cs.maxHeight!=='none' && e.offsetHeight>240){
@@ -258,22 +260,37 @@ enum Rules {
         });
       }catch(e){}
 
-      var h=document.querySelector('h1');
-      out.title=clean(h?h.innerText:(document.title||''));
+      var h1=document.querySelector('h1');
+      out.title=clean(h1?h1.innerText:(document.title||''));
 
-      function collect(container){
-        var acc=[], seen={};
-        var nodes=container.querySelectorAll('p,h2,h3,blockquote,li');
-        for(var i=0;i<nodes.length;i++){
-          if(nodes[i].closest('footer,nav,aside')) continue;
-          var t=clean(nodes[i].innerText);
-          if(t.length<30 || boiler(t) || seen[t]) continue;
-          seen[t]=1; acc.push({type:(/^H[23]$/.test(nodes[i].tagName)?'h2':'p'), text:t});
-        }
-        return acc;
+      function pushText(t, type){
+        var x=clean(t);
+        if(x.length<30 || boiler(x)) return;
+        out.blocks.push({type:type||'p', text:x});
       }
 
-      // ② JSON-LD articleBody（最可靠）
+      // ② Arc XP 服务端数据：路透/WSJ 的正文在 Fusion.globalContent 里（DOM 被 regwall 也常是全的）
+      try{
+        var F = window.Fusion || null;
+        var gc = F && F.globalContent ? F.globalContent : null;
+        var els = gc && gc.content_elements ? gc.content_elements : null;
+        if (els && els.length){
+          for (var i=0;i<els.length;i++){
+            var el=els[i]; if(!el) continue;
+            if (el.type==='text' && el.content){
+              var box=document.createElement('div'); box.innerHTML=el.content;
+              pushText(box.innerText,'p');
+            } else if ((el.type==='header'||el.type==='subheadline') && el.content){
+              var ht=clean(el.content);
+              if (ht.length>2 && ht.length<160) out.blocks.push({type:'h2', text:ht});
+            }
+          }
+        }
+      }catch(e){}
+      if(out.blocks.length>=3){ out.via='fusion_global'; return JSON.stringify(out); }
+
+      // ③ JSON-LD articleBody
+      out.blocks=[];
       try{
         document.querySelectorAll('script[type="application/ld+json"]').forEach(function(sc){
           var j=null; try{ j=JSON.parse(sc.textContent); }catch(e){ return; }
@@ -284,35 +301,43 @@ enum Rules {
             if(!body || body.length<200) return;
             var segs=body.split(/\n{2,}/);
             if(segs.length<3){ segs=body.split(/[.!?]\s+/); }
-            segs.forEach(function(seg){
-              var t=clean(seg);
-              if(t.length>40 && !boiler(t)) out.blocks.push({type:'p',text:t});
-            });
+            for(var si=0;si<segs.length;si++){ pushText(segs[si],'p'); }
           });
         });
       }catch(e){}
       if(out.blocks.length>=4){ out.via='jsonld_body'; return JSON.stringify(out); }
 
-      // ③ 严格容器择优：只认正文容器，绝不回退到 article 全量（footer 就在里面）
+      // ④ 严格容器择优
       out.blocks=[];
+      function collect(container){
+        var acc=[], seen={};
+        var nodes=container.querySelectorAll('p,h2,h3,blockquote');
+        for(var i=0;i<nodes.length;i++){
+          var n=nodes[i];
+          if(n.closest('footer,nav,aside')) continue;
+          var t=clean(n.innerText);
+          if(t.length<30 || boiler(t) || seen[t]) continue;
+          seen[t]=1;
+          acc.push({type:(/^H[23]$/.test(n.tagName)?'h2':'p'), text:t});
+        }
+        return acc;
+      }
       var cands=['[data-testid="ArticleBody"]','[data-testid="article-body"]',
-                 '[class*="article-body"]','[class*="ArticleBody"]',
-                 '[class*="article__body"]','[class*="articleBody"]',
-                 '[class*="content-body"]','[class*="story-body"]',
-                 '[class*="body-content"]','[class*="article-content"]'];
+                 '[data-testid="Article"]','[class*="article-body"]','[class*="ArticleBody"]',
+                 '[class*="article__body"]','[class*="articleBody"]','[class*="story-body"]',
+                 '[class*="content-body"]','[class*="body-content"]','[class*="article-content"]'];
       var best=null, bestLen=0, bestSel='';
-      for(var ci=0; ci<cands.length; ci++){
-        var els=document.querySelectorAll(cands[ci]);
-        for(var ei=0; ei<els.length; ei++){
-          var acc=collect(els[ei]);
+      for(var ci=0; ci<cands.length && !best; ci++){
+        var els2=document.querySelectorAll(cands[ci]);
+        for(var ei=0; ei<els2.length; ei++){
+          var acc=collect(els2[ei]);
           var len=acc.reduce(function(n,b){ return n+b.text.length; },0);
           if(acc.length>=3 && len>bestLen){ best=acc; bestLen=len; bestSel='c'+ci; }
         }
-        if(best) break;
       }
       if(best){ out.blocks=best; out.via=bestSel+'_'+bestLen; return JSON.stringify(out); }
 
-      // ④ 段落 div（Arc XP 常见）：取所有 data-testid=paragraph-N 的公共父容器
+      // ⑤ paragraph-N 结构
       var ps=document.querySelectorAll('[data-testid^="paragraph"]');
       if(ps.length>=3){
         var acc2=[], seen2={};
@@ -324,7 +349,20 @@ enum Rules {
         if(acc2.length>=3){ out.blocks=acc2; out.via='paragraph_divs'; return JSON.stringify(out); }
       }
 
-      // ⑤ 全部失败：返回空，让上层走 archive / 提示（绝不把页脚当正文）
+      // ⑥ 安全兜底：footer 已删，再用 article/main 段落（此前"抓不到就失败"是错的）
+      out.blocks=[];
+      var hosts=[document.querySelector('article'),
+                 document.querySelector('[role="main"]'),
+                 document.querySelector('main'),
+                 document.body];
+      for(var hi=0; hi<hosts.length; hi++){
+        if(!hosts[hi]) continue;
+        var acc3=collect(hosts[hi]);
+        if(acc3.length>=3){
+          out.blocks=acc3; out.via='salvage'+hi; return JSON.stringify(out);
+        }
+      }
+
       out.via='none';
       return JSON.stringify(out);
     })();
@@ -390,7 +428,7 @@ enum Rules {
         ]
         var hits = 0
         for b in bad where t.contains(b) { hits += 1 }
-        return hits >= 2
+        return hits >= 3
     }
 
     static func hint(for site: Site) -> String {

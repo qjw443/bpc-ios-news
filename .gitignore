@@ -15,3 +15,5 @@ __pycache__/
 _log/
 *.log
 
+.secrets/
+DELIVERY-KEYS.txt
