@@ -53,7 +53,6 @@ struct SourceTag: View {
         switch site {
         case "bloomberg": return "BLOOMBERG"
         case "reuters": return "REUTERS"
-        case "wsj": return "WSJ"
         default: return site.uppercased()
         }
     }
@@ -62,7 +61,6 @@ struct SourceTag: View {
         switch site {
         case "bloomberg": return Theme.ink
         case "reuters": return Theme.orange
-        case "wsj": return Color(red: 0.85, green: 0.22, blue: 0.22)
         default: return Theme.surface
         }
     }

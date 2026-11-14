@@ -53,21 +53,6 @@ enum Sources {
                  kind: .sitemap),
     ]
 
-    /// 华尔街日报中文网：官方 RSS（可能被边缘挑战）+ 网页兜底
-    static let wsj: [Endpoint] = [
-        Endpoint(site: .wsj, name: "WSJ 中文 RSS",
-                 url: "https://cn.wsj.com/zh-hans/rss", kind: .rss),
-        Endpoint(site: .wsj, name: "WSJ 英文 RSS",
-                 url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", kind: .rss),
-    ]
-
-    static let wsjPages = [
-        "https://cn.wsj.com/zh-hans/",
-        "https://cn.wsj.com/zh-hans/news",
-        "https://cn.wsj.com/zh-hans/market",
-        "https://cn.wsj.com/zh-hans/economy",
-    ]
-
     /// 路透网页兜底：用 App 内 WKWebView 打开栏目页，抽文章链接
     static let reutersPages = [
         "https://www.reuters.com/world/",
@@ -87,7 +72,7 @@ enum Sources {
         switch site {
         case .bloomberg: return bloomberg
         case .reuters: return reuters
-        case .wsj: return wsj
+        case .wsj: return []        // 已停止采集（保留 case 仅为兼容旧数据解码）
         }
     }
 
@@ -95,7 +80,7 @@ enum Sources {
         switch site {
         case .bloomberg: return bloombergPages
         case .reuters: return reutersPages
-        case .wsj: return wsjPages
+        case .wsj: return []        // 已停止采集
         }
     }
 
@@ -134,13 +119,7 @@ enum Sources {
             if segs.count <= 2 && !hasDate && !hasId { return false }
             return hasDate || hasId || words >= 7
         case .wsj:
-            guard u.contains("wsj.com/") else { return false }
-            // 中文站：/articles/<slug>-<id> 或 /zh-hans/<section>/<slug>
-            if u.contains("/articles/") { return true }
-            let segs = u.split(separator: "/").map(String.init)
-            guard segs.count >= 3 else { return false }
-            let last = segs[segs.count - 1]
-            return last.count > 16 && !last.contains(".html")
+            return false            // 已停止采集
         }
     }
 }

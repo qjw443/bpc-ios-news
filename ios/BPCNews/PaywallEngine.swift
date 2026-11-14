@@ -121,11 +121,17 @@ final class PaywallEngine: NSObject {
         poolLock.unlock()
     }
 
-    /// 预热：提前建好一个 WebView，抵消首次创建开销
+    /// 预热：建好 WebView 并**真正访问站点首页**——先拿到 cf_clearance / 同意 cookie，
+    /// 之后抓文章就不用重新过一遍人机验证（既提速也降检测概率）。
     func warmUp(site: Site) {
+        guard let host = site.domains.first,
+              let home = URL(string: "https://www.\(host)/") else { return }
         DispatchQueue.main.async {
             let wv = self.makeWebView(site: site, userAgent: Rules.chromeUA)
-            self.recycle(wv, site: site)
+            wv.load(self.request(for: home, site: site))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 7) {
+                self.recycle(wv, site: site)
+            }
         }
     }
 

@@ -5,7 +5,7 @@ import Foundation
 enum Site: String, Codable, CaseIterable {
     case bloomberg
     case reuters
-    case wsj
+    case wsj            // 仅用于兼容旧数据解码；已停止采集
 
     var label: String {
         switch self {
@@ -120,6 +120,8 @@ final class Library {
             for b in badTitles where low.contains(b) { return false }
             return true
         }
+        // 清掉已下线来源（WSJ）的历史条目，避免列表残留
+        items = items.filter { $0.site != .wsj }
         // 再清一轮：把不符合「文章 URL」规则的条目（栏目页/专题页）剔除
         items = items.filter { Sources.isArticleURL($0.url, site: $0.site) }
         if items.count != before { persistFeed() }

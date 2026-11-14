@@ -48,7 +48,7 @@ enum Rules {
         switch site {
         case .bloomberg: return blockBloomberg
         case .reuters: return blockReuters
-        case .wsj: return blockReuters          // WSJ 同属「付费墙 + 计量」类型，复用同一套拦截
+        case .wsj: return blockReuters          // 兼容旧数据
         }
     }
 
@@ -221,15 +221,16 @@ enum Rules {
     })();
     """#
 
-    /// 路透 / WSJ：对付费墙页面通用的一套提取
+    /// 路透：对付费墙页面通用的一套提取（多源取最多）
     ///   ① 拆掉 regwall/paywall 遮罩 + 解除 maxHeight 裁剪
     ///   ② 先读 JSON-LD 的 articleBody（付费墙页最可靠的正文来源）
     ///   ③ 再按宽选择器抓段落，过滤「Reporting by / Our Standards / opens new tab」等页脚样板
     static let extractPaywalled = #"""
     (function(){
       var out={title:'',blocks:[],summary:[],audio:'',via:'',walls:[]};
-      function clean(s){ return (s||'').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').trim(); }
+      var A=[], B=[], C=[], D=[];      // A=fusion  B=jsonld  C=strict  D=paragraph/salvage
 
+      function clean(s){ return (s||'').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').trim(); }
       function boiler(s){
         return /^(our standards|reporting by|editing by|additional reporting|make sense of|register now|opens new tab|read more|advertisement|sign up|subscribe|follow us)/i.test(s)
           || /thomson reuters trust principle/i.test(s)
@@ -238,83 +239,114 @@ enum Rules {
           || /©\s*\d{4}|all rights reserved|保留所有权利/i.test(s)
           || /^(汤森路透|我们的标准|路透社是汤森路透|记者|编辑|注册|所有报价)/.test(s);
       }
+      function ok(t){ var x=clean(t); return x.length>=30 && !boiler(x); }
+      function pushTo(arr, t, type){
+        var x=clean(t);
+        if (x.length<30 || boiler(x)) return;
+        arr.push({type:type||'p', text:x});
+      }
 
-      // ① 删页脚 / 导航 / 相关阅读 / 订阅框 / 遮罩，并解除裁剪
+      // ① 清理 DOM（页脚/导航/遮罩），并解除裁剪
       try{
-        var junk = 'footer,nav,aside,[role="navigation"],[role="contentinfo"],'
-          + '[class*="footer"],[class*="Footer"],[data-testid*="footer"],'
-          + '[class*="related"],[class*="Related"],[class*="newsletter"],'
-          + '[class*="subscribe"],[class*="promo"],[data-testid*="paywall"],'
-          + '[class*="regwall"],[class*="Regwall"],[class*="Paywall"]';
-        var removed = document.querySelectorAll(junk);
-        for (var ri=0; ri<removed.length; ri++){
-          if (removed[ri].offsetHeight > 40) out.walls.push((removed[ri].className||'').toString().slice(0,40));
-          removed[ri].remove();
+        var junk='footer,nav,aside,[role="navigation"],[role="contentinfo"],'
+          +'[class*="footer"],[class*="Footer"],[data-testid*="footer"],'
+          +'[class*="related"],[class*="Related"],[class*="newsletter"],'
+          +'[class*="subscribe"],[class*="promo"],[data-testid*="paywall"],'
+          +'[class*="regwall"],[class*="Regwall"],[class*="Paywall"]';
+        var rm=document.querySelectorAll(junk);
+        for(var ri=0;ri<rm.length;ri++){
+          if(rm[ri].offsetHeight>40) out.walls.push((rm[ri].className||'').toString().slice(0,40));
+          rm[ri].remove();
         }
-        document.querySelectorAll('div,section,article').forEach(function(e){
-          var cs=getComputedStyle(e);
-          if(cs.maxHeight && cs.maxHeight!=='none' && e.offsetHeight>240){
-            e.style.maxHeight='none'; e.style.overflow='visible';
+        var all=document.querySelectorAll('div,section,article');
+        for(var ai=0;ai<all.length;ai++){
+          var cs=getComputedStyle(all[ai]);
+          if(cs.maxHeight && cs.maxHeight!=='none' && all[ai].offsetHeight>240){
+            all[ai].style.maxHeight='none'; all[ai].style.overflow='visible';
           }
-          if(cs.position==='fixed' && e.offsetHeight>window.innerHeight*0.6) e.remove();
-        });
+          if(cs.position==='fixed' && all[ai].offsetHeight>window.innerHeight*0.6) all[ai].remove();
+        }
       }catch(e){}
-
       var h1=document.querySelector('h1');
       out.title=clean(h1?h1.innerText:(document.title||''));
 
-      function pushText(t, type){
-        var x=clean(t);
-        if(x.length<30 || boiler(x)) return;
-        out.blocks.push({type:type||'p', text:x});
-      }
-
-      // ② Arc XP 服务端数据：路透/WSJ 的正文在 Fusion.globalContent 里（DOM 被 regwall 也常是全的）
-      try{
-        var F = window.Fusion || null;
-        var gc = F && F.globalContent ? F.globalContent : null;
-        var els = gc && gc.content_elements ? gc.content_elements : null;
-        if (els && els.length){
-          for (var i=0;i<els.length;i++){
-            var el=els[i]; if(!el) continue;
-            if (el.type==='text' && el.content){
-              var box=document.createElement('div'); box.innerHTML=el.content;
-              pushText(box.innerText,'p');
-            } else if ((el.type==='header'||el.type==='subheadline') && el.content){
-              var ht=clean(el.content);
-              if (ht.length>2 && ht.length<160) out.blocks.push({type:'h2', text:ht});
+      // ② A：深度遍历所有服务端数据源，找 content_elements / paragraphs / body
+      function harvest(o, depth){
+        if(!o || depth>7) return;
+        if(Array.isArray(o)){
+          for(var i=0;i<o.length;i++) harvest(o[i], depth+1);
+          return;
+        }
+        if(typeof o!=='object') return;
+        try{
+          if(Array.isArray(o.content_elements)){
+            for(var j=0;j<o.content_elements.length;j++){
+              var el=o.content_elements[j]; if(!el) continue;
+              if((el.type==='text'||el.type==='paragraph') && el.content){
+                var bx=document.createElement('div'); bx.innerHTML=el.content;
+                pushTo(A, bx.innerText, 'p');
+              } else if((el.type==='header'||el.type==='subheadline') && el.content){
+                var ht=clean(el.content);
+                if(ht.length>2 && ht.length<160) A.push({type:'h2',text:ht});
+              }
             }
+          }
+          if(Array.isArray(o.paragraphs)){
+            for(var k=0;k<o.paragraphs.length;k++){
+              var pg=o.paragraphs[k]; if(!pg) continue;
+              if(typeof pg==='string'){ pushTo(A, pg, 'p'); }
+              else if(pg.content){ var b2=document.createElement('div'); b2.innerHTML=pg.content; pushTo(A, b2.innerText,'p'); }
+              else if(pg.text){ pushTo(A, pg.text, 'p'); }
+            }
+          }
+        }catch(e){}
+        for(var key in o){
+          if(key==='content_elements'||key==='paragraphs') continue;
+          try{ harvest(o[key], depth+1); }catch(e){}
+        }
+      }
+      try{
+        var seeds=[];
+        if(window.Fusion && window.Fusion.globalContent) seeds.push(window.Fusion.globalContent);
+        if(window.Fusion && window.Fusion.contentCache){
+          var cc=window.Fusion.contentCache;
+          for(var ck in cc){ try{ if(cc[ck] && cc[ck].content) seeds.push(cc[ck].content); }catch(e){} }
+        }
+        var fm=document.getElementById('fusion-metadata');
+        if(fm && (fm.textContent||'').length>200){ try{ seeds.push(JSON.parse(fm.textContent)); }catch(e){} }
+        ['__INITIAL_STATE__','__PRELOADED_STATE__','__NEXT_DATA__','__APOLLO_STATE__','__DATA__'].forEach(function(nm){
+          if(window[nm]) seeds.push(window[nm]);
+        });
+        var nd=document.getElementById('__NEXT_DATA__');
+        if(nd && (nd.textContent||'').length>200){ try{ seeds.push(JSON.parse(nd.textContent)); }catch(e){} }
+        for(var si=0;si<seeds.length;si++) harvest(seeds[si], 0);
+      }catch(e){}
+
+      // ③ B：JSON-LD articleBody
+      try{
+        var lds=document.querySelectorAll('script[type="application/ld+json"]');
+        for(var li=0;li<lds.length;li++){
+          var j=null; try{ j=JSON.parse(lds[li].textContent); }catch(e){ continue; }
+          var arr=Array.isArray(j)?j:[j];
+          for(var ai2=0;ai2<arr.length;ai2++){
+            var o2=arr[ai2]; if(!o2) continue;
+            var body=o2.articleBody||o2.article_body;
+            if(!body || body.length<200) continue;
+            var segs=body.split(/\n{2,}/);
+            if(segs.length<3) segs=body.split(/[.!?]\s+/);
+            for(var s2=0;s2<segs.length;s2++) pushTo(B, segs[s2], 'p');
           }
         }
       }catch(e){}
-      if(out.blocks.length>=3){ out.via='fusion_global'; return JSON.stringify(out); }
 
-      // ③ JSON-LD articleBody
-      out.blocks=[];
-      try{
-        document.querySelectorAll('script[type="application/ld+json"]').forEach(function(sc){
-          var j=null; try{ j=JSON.parse(sc.textContent); }catch(e){ return; }
-          var arr=Array.isArray(j)?j:[j];
-          arr.forEach(function(o){
-            if(!o) return;
-            var body=o.articleBody||o.article_body;
-            if(!body || body.length<200) return;
-            var segs=body.split(/\n{2,}/);
-            if(segs.length<3){ segs=body.split(/[.!?]\s+/); }
-            for(var si=0;si<segs.length;si++){ pushText(segs[si],'p'); }
-          });
-        });
-      }catch(e){}
-      if(out.blocks.length>=4){ out.via='jsonld_body'; return JSON.stringify(out); }
-
-      // ④ 严格容器择优
-      out.blocks=[];
+      // ④ C：严格正文容器
       function collect(container){
         var acc=[], seen={};
+        if(!container) return acc;
         var nodes=container.querySelectorAll('p,h2,h3,blockquote');
         for(var i=0;i<nodes.length;i++){
           var n=nodes[i];
-          if(n.closest('footer,nav,aside')) continue;
+          try{ if(n.closest('footer,nav,aside')) continue; }catch(e){}
           var t=clean(n.innerText);
           if(t.length<30 || boiler(t) || seen[t]) continue;
           seen[t]=1;
@@ -322,48 +354,51 @@ enum Rules {
         }
         return acc;
       }
-      var cands=['[data-testid="ArticleBody"]','[data-testid="article-body"]',
-                 '[data-testid="Article"]','[class*="article-body"]','[class*="ArticleBody"]',
-                 '[class*="article__body"]','[class*="articleBody"]','[class*="story-body"]',
-                 '[class*="content-body"]','[class*="body-content"]','[class*="article-content"]'];
-      var best=null, bestLen=0, bestSel='';
-      for(var ci=0; ci<cands.length && !best; ci++){
-        var els2=document.querySelectorAll(cands[ci]);
-        for(var ei=0; ei<els2.length; ei++){
-          var acc=collect(els2[ei]);
-          var len=acc.reduce(function(n,b){ return n+b.text.length; },0);
-          if(acc.length>=3 && len>bestLen){ best=acc; bestLen=len; bestSel='c'+ci; }
+      var cands=['[data-testid="ArticleBody"]','[data-testid="article-body"]','[data-testid="Article"]',
+                 '[class*="article-body"]','[class*="ArticleBody"]','[class*="article__body"]',
+                 '[class*="articleBody"]','[class*="story-body"]','[class*="content-body"]',
+                 '[class*="body-content"]','[class*="article-content"]','[class*="article__content"]'];
+      var bestC=null;
+      for(var ci=0;ci<cands.length;ci++){
+        var els=document.querySelectorAll(cands[ci]);
+        for(var ei=0;ei<els.length;ei++){
+          var acc=collect(els[ei]);
+          if(acc.length>=3 && (!bestC || acc.length>bestC.length)) bestC=acc;
         }
       }
-      if(best){ out.blocks=best; out.via=bestSel+'_'+bestLen; return JSON.stringify(out); }
+      if(bestC) C=bestC;
 
-      // ⑤ paragraph-N 结构
-      var ps=document.querySelectorAll('[data-testid^="paragraph"]');
-      if(ps.length>=3){
-        var acc2=[], seen2={};
-        for(var pi=0; pi<ps.length; pi++){
-          var t2=clean(ps[pi].innerText);
-          if(t2.length<30 || boiler(t2) || seen2[t2]) continue;
-          seen2[t2]=1; acc2.push({type:'p',text:t2});
+      // ⑤ D：paragraph-* 与 salvage（footer 已删）
+      try{
+        var ps=document.querySelectorAll('[data-testid^="paragraph"]');
+        if(ps.length>=3){
+          var seenP={};
+          for(var pi=0;pi<ps.length;pi++){
+            var tp=clean(ps[pi].innerText);
+            if(tp.length<30 || boiler(tp) || seenP[tp]) continue;
+            seenP[tp]=1; D.push({type:'p',text:tp});
+          }
         }
-        if(acc2.length>=3){ out.blocks=acc2; out.via='paragraph_divs'; return JSON.stringify(out); }
-      }
-
-      // ⑥ 安全兜底：footer 已删，再用 article/main 段落（此前"抓不到就失败"是错的）
-      out.blocks=[];
-      var hosts=[document.querySelector('article'),
-                 document.querySelector('[role="main"]'),
-                 document.querySelector('main'),
-                 document.body];
-      for(var hi=0; hi<hosts.length; hi++){
-        if(!hosts[hi]) continue;
-        var acc3=collect(hosts[hi]);
-        if(acc3.length>=3){
-          out.blocks=acc3; out.via='salvage'+hi; return JSON.stringify(out);
+      }catch(e){}
+      if(D.length<3){
+        var hosts=[document.querySelector('article'),document.querySelector('[role="main"]'),
+                   document.querySelector('main'),document.body];
+        for(var hi=0;hi<hosts.length;hi++){
+          var acc2=collect(hosts[hi]);
+          if(acc2.length>=3){ D=acc2; break; }
         }
       }
 
-      out.via='none';
+      // ⑥ 取「段数最多」的来源：DOM 被截断时，服务端数据(A/B) 一定更长
+      var best=[], via='none', bestScore=0;
+      function score(arr){ return arr.length*1000 + arr.reduce(function(n,b){return n+(b.text?b.text.length:0);},0); }
+      [['fusion',A],['jsonld',B],['strict',C],['dom',D]].forEach(function(pair){
+        var sc=score(pair[1]);
+        if(pair[1].length>=3 && sc>bestScore){ best=pair[1]; via=pair[0]; bestScore=sc; }
+      });
+
+      out.blocks=best;
+      out.via = best.length ? (via + '_' + best.length) : 'none';
       return JSON.stringify(out);
     })();
     """#
@@ -371,15 +406,12 @@ enum Rules {
     /// 路透
     static let extractReuters = extractPaywalled
 
-    /// 华尔街日报（中文站结构不同，但同属付费墙，复用同一套）
-    static let extractWSJ = extractPaywalled
-
     /// 按站点选择提取脚本
     static func extractJS(for site: Site) -> String {
         switch site {
         case .bloomberg: return extractBloomberg
         case .reuters: return extractReuters
-        case .wsj: return extractWSJ
+        case .wsj: return extractPaywalled   // 兼容旧数据（已停止采集）
         }
     }
 
@@ -450,7 +482,7 @@ enum Rules {
         switch site {
         case .bloomberg: return "已拦 fence 客户端 · 已去 articleBlur 模糊 · 已清计量计数"
         case .reuters: return "已拦 arc/subs · 已拆遮罩 · 已清计量"
-        case .wsj: return "已拦订阅脚本 · 已拆遮罩 · 已清计量"
+        case .wsj: return "已停止采集"
         }
     }
 }

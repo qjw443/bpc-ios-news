@@ -8,7 +8,6 @@ struct SettingsView: View {
 
     @AppStorage("src_bloomberg") private var srcBloomberg: Bool = true
     @AppStorage("src_reuters") private var srcReuters: Bool = true
-    @AppStorage("src_wsj") private var srcWSJ: Bool = true
     @AppStorage("auto_fetch") private var autoFetch: Bool = true
     @AppStorage("fresh_hours") private var freshHours: Int = 24
     @AppStorage("auto_monitor") private var autoMonitor: Bool = true
@@ -144,13 +143,6 @@ struct SettingsView: View {
                 }
             }.tint(Theme.orange)
 
-            Toggle(isOn: $srcWSJ) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("华尔街日报中文网 WSJ").foregroundColor(Theme.ink)
-                    Text("cn.wsj.com · 官方 RSS + 网页抓取")
-                        .font(.system(size: 10)).foregroundColor(Theme.inkDim)
-                }
-            }.tint(Theme.orange)
         } header: {
             Kicker(text: "信源").padding(.bottom, 2)
         } footer: {
