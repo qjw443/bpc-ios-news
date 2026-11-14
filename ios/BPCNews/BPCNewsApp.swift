@@ -15,8 +15,6 @@ struct BPCNewsApp: App {
                     .tabItem { Label("宏观", systemImage: "chart.xyaxis.line") }
                 PolyView()
                     .tabItem { Label("预测", systemImage: "chart.bar.xaxis") }
-                ResearchView()
-                    .tabItem { Label("研报", systemImage: "doc.text.magnifyingglass") }
             }
             .tint(Theme.orange)
             .preferredColorScheme(.dark)

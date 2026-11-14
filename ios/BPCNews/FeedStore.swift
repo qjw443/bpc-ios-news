@@ -67,6 +67,7 @@ final class FeedStore: ObservableObject {
             m.start(queue: DispatchQueue(label: "bpc.net.monitor"))
             pathMonitor = m
         }
+        startTranslateEngine()
     }
 
     func stopMonitoring() {
@@ -189,7 +190,10 @@ final class FeedStore: ObservableObject {
                 self.lastRoundMs = roundMs
                 var s = "彭博 \(bbg) · 路透 \(rtr) · 新增 \(fresh.count)"
                 if skippedOld > 0 { s += " · 滤除旧闻 \(skippedOld)" }
-                if !fresh.isEmpty { self.newItemsToken += 1 }
+                if !fresh.isEmpty {
+                    self.newItemsToken += 1
+                    self.translatePendingTitles()
+                }
                 self.status = s
                 self.lastCheck = Int(Date().timeIntervalSince1970)
                 UserDefaults.standard.set(self.lastCheck, forKey: "last_check_ts")
@@ -214,6 +218,58 @@ final class FeedStore: ObservableObject {
             }
             completion?()
         }
+    }
+
+    // MARK: - 内置翻译引擎（数据层驱动，切到任何页签都在跑）
+
+    @Published var translating = false
+    private var titleTried: [String: Int] = [:]     // id -> 已尝试次数
+    private var translateTimer: Timer?
+
+    /// 把还没中文的标题翻一批；由 5 秒定时器 + 新稿入库事件驱动
+    func translatePendingTitles() {
+        guard !translating else { return }
+
+        let pool = items.filter { it in
+            !TextQuality.isTranslated(it.titleZh) && (titleTried[it.id] ?? 0) < 3
+        }
+        guard !pool.isEmpty else { return }
+
+        translating = true
+        let batch = Array(pool.prefix(40))
+        for it in batch { titleTried[it.id, default: 0] += 1 }
+        if titleTried.count > 1500 { titleTried = [:] }
+
+        TranslateService.shared.translate(batch.map { $0.title }) { [weak self] zh, _ in
+            guard let self = self else { return }
+            var appliedAny = false
+            for (i, it) in batch.enumerated() where i < zh.count {
+                var t = zh[i].trimmingCharacters(in: .whitespacesAndNewlines)
+                t = t.replacingOccurrences(of: "%20", with: " ")
+                     .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard TextQuality.isTranslatedLoose(t), t != it.title else { continue }
+                Library.shared.setTitleZh(it.id, t)
+                appliedAny = true
+            }
+            if appliedAny { self.items = Library.shared.items }
+            self.translating = false
+            self.notifyPending()
+        }
+    }
+
+    private func startTranslateEngine() {
+        guard translateTimer == nil else { return }
+        let t = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            self?.translatePendingTitles()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        translateTimer = t
+    }
+
+    private func stopTranslateEngine() {
+        translateTimer?.invalidate()
+        translateTimer = nil
     }
 
     // MARK: - 预取（点开即秒开）

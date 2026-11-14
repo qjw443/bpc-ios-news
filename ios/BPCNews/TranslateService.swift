@@ -97,6 +97,24 @@ final class TranslateService {
         var onlineHit = 0
         let hitLock = NSLock()
 
+        // 整体超时兜底：无论网络如何，25 秒内一定回调一次
+        var finished = false
+        let doneLock = NSLock()
+        let overallTimeout = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            doneLock.lock()
+            if finished { doneLock.unlock(); return }
+            finished = true
+            doneLock.unlock()
+            var out2 = out
+            for i in texts.indices where out2[i].isEmpty {
+                let zh = Dict.translate(texts[i])
+                out2[i] = (TextQuality.isTranslatedLoose(zh) ? zh : texts[i])
+            }
+            completion(out2, .dict)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: overallTimeout)
+
         for i in pending {
             group.enter()
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -119,6 +137,11 @@ final class TranslateService {
         }
 
         group.notify(queue: .main) {
+            doneLock.lock()
+            if finished { doneLock.unlock(); return }
+            finished = true
+            doneLock.unlock()
+            overallTimeout.cancel()
             var usedDict = false
             for i in texts.indices where out[i].isEmpty {
                 let zh = Dict.translate(texts[i])

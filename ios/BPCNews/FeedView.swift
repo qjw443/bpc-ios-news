@@ -32,10 +32,6 @@ struct FeedView: View {
     @State private var showShare = false
 
     // 标题中文化（TranslateService 驱动，与视图生命周期解耦）
-    @State private var titleBusy = false
-    @State private var titleTried: Set<String> = []
-    @State private var visibleIds: Set<String> = []
-    @State private var retries: [String: Int] = [:]
 
     private let openItem = NotificationCenter.default.publisher(for: .bpcOpenItem)
     @Environment(\.scenePhase) private var scenePhase
@@ -69,10 +65,7 @@ struct FeedView: View {
                                     .simultaneousGesture(TapGesture().onEnded {
                                         if !item.read { store.markRead(item.id) }
                                     })
-                                    .onAppear {
-                                        visibleIds.insert(item.id)
-                                        translateSoon()
-                                    }
+                                    .onAppear { }
                                     .contextMenu {
                                         Button {
                                             store.toggleSaved(item.id)
@@ -115,19 +108,13 @@ struct FeedView: View {
                 if phase == .active {
                     store.startMonitoring()
                     store.refresh {
-                        titleTried.removeAll()
-                        translateTitles()
+                        store.translatePendingTitles()
                     }
                 }
             }
-            .onChange(of: store.items.count) { _ in translateTitles() }
             .onChange(of: store.newItemsToken) { _ in
-                translateTitles()
+                store.translatePendingTitles()
                 store.prefetch(Array(filtered.prefix(3)))
-            }
-            // 用户要求：每 5 秒自动扫一遍未完成/半成品的翻译
-            .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
-                translateTitles()
             }
             .onReceive(openItem) { note in
                 if let id = note.object as? String {
@@ -143,7 +130,7 @@ struct FeedView: View {
                 if !onboarded { showOnboarding = true }
                 store.startMonitoring()
                 if store.items.isEmpty { store.refresh() }
-                translateTitles()
+                store.translatePendingTitles()
                 // 预取顶部 3 条：点开时正文已在本地
                 store.prefetch(Array(filtered.prefix(3)))
             }
@@ -198,7 +185,7 @@ struct FeedView: View {
                     }
                     Button {
                         haptic(.medium)
-                        store.refresh(notify: true) { translateTitles() }
+                        store.refresh(notify: true) { store.translatePendingTitles() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 13, weight: .semibold))
@@ -431,7 +418,7 @@ struct FeedView: View {
                 .lineSpacing(3)
             Button {
                 haptic(.medium)
-                store.refresh(notify: true) { translateTitles() }
+                store.refresh(notify: true) { store.translatePendingTitles() }
             } label: {
                 Text("立即抓一轮")
                     .font(.system(size: 12, weight: .semibold))
@@ -513,8 +500,7 @@ struct FeedView: View {
     private func pull() async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             store.refresh(notify: true) {
-                titleTried.removeAll()
-                translateTitles()
+                store.translatePendingTitles()
                 cont.resume()
             }
         }
@@ -537,66 +523,8 @@ struct FeedView: View {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 
-    // MARK: - 标题中文化（TranslateService）
-
-    private func translateSoon() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { translateTitles() }
-    }
-
-    private func translateTitles() {
-        guard !titleBusy else { return }
-
-        // 未翻译 + 半成品（半英半中）都要重翻
-        let pool = store.items.filter {
-            TextQuality.needsRetranslate($0.titleZh) && !titleTried.contains($0.id)
-        }
-        guard !pool.isEmpty else {
-            dictFill()
-            return
-        }
-
-        let visibleFirst = pool.filter { visibleIds.contains($0.id) }
-        let rest = pool.filter { !visibleIds.contains($0.id) }
-        let batch = Array((visibleFirst + rest).prefix(60))
-        guard !batch.isEmpty else { return }
-
-        for it in batch { titleTried.insert(it.id) }
-        if titleTried.count > 1200 { titleTried = Set(titleTried.suffix(600)) }
-
-        titleBusy = true
-        let texts = batch.map { $0.title }
-        TranslateService.shared.translate(texts) { results, _ in
-            for (i, it) in batch.enumerated() where i < results.count {
-                let t = results[i].trimmingCharacters(in: .whitespacesAndNewlines)
-                // 只接受「整句基本中文」的结果；半成品不放行，继续排队重试
-                guard TextQuality.isTranslated(t), t != it.title else {
-                    let n = (retries[it.id] ?? 0) + 1
-                    retries[it.id] = n
-                    if n <= 4 { titleTried.remove(it.id) }
-                    continue
-                }
-                Library.shared.setTitleZh(it.id, t)
-            }
-            store.items = Library.shared.items
-            titleBusy = false
-            store.notifyPending()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { translateTitles() }
-        }
-    }
-
-    private func dictFill() {
-        var changed = false
-        for it in store.items where it.titleZh.isEmpty {
-            let zh = Dict.translate(it.title)
-            if !zh.isEmpty, zh != it.title {
-                Library.shared.setTitleZh(it.id, zh)
-                changed = true
-            }
-        }
-        if changed { store.items = Library.shared.items }
-        store.notifyPending()
-    }
 }
+
 
 // MARK: - 行
 

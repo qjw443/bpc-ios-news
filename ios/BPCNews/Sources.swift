@@ -53,10 +53,13 @@ enum Sources {
 
     /// 路透网页兜底：用 App 内 WKWebView 打开栏目页，抽文章链接
     static let reutersPages = [
+        "https://www.reuters.com/",
         "https://www.reuters.com/world/",
         "https://www.reuters.com/business/",
         "https://www.reuters.com/markets/",
         "https://www.reuters.com/technology/",
+        "https://www.reuters.com/legal/",
+        "https://www.reuters.com/breakingviews/",
     ]
 
     /// 彭博网页兜底（sitemap + RSS 都失败时）
