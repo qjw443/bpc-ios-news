@@ -9,37 +9,39 @@ struct ResearchItem: Identifiable, Hashable {
     let org: String
     let date: String        // yyyy-MM-dd
     let url: String
-    let kind: String        // stock / industry / strategy / macro / paper
+    let kind: String        // bank / asset / filing / analyst / market / paper
     var titleZh: String = ""
 
     var kindLabel: String {
         switch kind {
-        case "stock": return "个股"
-        case "industry": return "行业"
-        case "strategy": return "策略"
-        case "macro": return "宏观"
+        case "bank": return "投行"
+        case "asset": return "资管"
+        case "filing": return "披露"
+        case "analyst": return "分析师"
+        case "market": return "市场"
         case "paper": return "论文"
-        default: return "研报"
+        default: return "研究"
         }
     }
 }
 
 enum ResearchKind: String, CaseIterable, Identifiable {
-    case all, stock, industry, strategy, macro, paper
+    case all, bank, asset, filing, analyst, market, paper
     var id: String { rawValue }
     var title: String {
         switch self {
         case .all: return "全部"
-        case .stock: return "个股"
-        case .industry: return "行业"
-        case .strategy: return "策略"
-        case .macro: return "宏观"
+        case .bank: return "投行"
+        case .asset: return "资管"
+        case .filing: return "披露"
+        case .analyst: return "分析师"
+        case .market: return "市场"
         case .paper: return "论文"
         }
     }
 }
 
-// MARK: - Store
+// MARK: - Store（纯美股来源）
 
 final class ResearchStore: ObservableObject {
 
@@ -52,21 +54,19 @@ final class ResearchStore: ObservableObject {
 
     private var fetching = false
 
-    /// 东方财富研报中心（免费 JSON）：0 个股 / 1 行业 / 2 策略 / 3 宏观
-    private let eastmoneyTypes = [("0", "stock"), ("1", "industry"), ("2", "strategy"), ("3", "macro")]
-    private let detailPath = ["stock": "zw_stock", "industry": "zw_industry",
-                              "strategy": "zw_strategy", "macro": "zw_macresearch"]
+    /// SEC 要求 UA 里带联系方式，否则 403
+    private let secUA = "BPCNews/1.0 (US equity research reader; contact: bpc@example.com)"
+    private let browserUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        + "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 
     private lazy var session: URLSession = {
         let c = URLSessionConfiguration.default
-        c.timeoutIntervalForRequest = 20
-        c.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-            "Referer": "https://data.eastmoney.com/report/",
-            "Accept": "application/json,text/plain,*/*",
-        ]
+        c.timeoutIntervalForRequest = 22
+        c.httpAdditionalHeaders = ["Accept-Language": "en-US,en;q=0.9"]
         return URLSession(configuration: c)
     }()
+
+    // MARK: 入口
 
     func refresh(completion: (() -> Void)? = nil) {
         guard !fetching else { completion?(); return }
@@ -76,30 +76,60 @@ final class ResearchStore: ObservableObject {
 
         let group = DispatchGroup()
         let lock = NSLock()
-        var collected: [ResearchItem] = []
-        var failures = 0
+        var all: [ResearchItem] = []
 
-        for (qType, kind) in eastmoneyTypes {
+        func add(_ list: [ResearchItem]) {
+            lock.lock(); all.append(contentsOf: list); lock.unlock()
+        }
+
+        // ① 投行 / 资管观点（HTML 列表抓取）
+        let pages: [(String, String, String, String)] = [
+            // name, url, kind, href 过滤关键字
+            ("Morgan Stanley", "https://www.morganstanley.com/ideas", "bank", "/ideas/"),
+            ("Goldman Sachs", "https://www.goldmansachs.com/insights", "bank", "/insights/"),
+            ("BlackRock BII", "https://www.blackrock.com/corporate/insights/blackrock-investment-institute", "asset", "/insights/"),
+        ]
+        for (org, url, kind, key) in pages {
             group.enter()
-            fetchEastmoney(qType: qType, kind: kind) { list in
-                lock.lock()
-                if list.isEmpty { failures += 1 } else { collected.append(contentsOf: list) }
-                lock.unlock()
-                group.leave()
+            fetchHTMLList(org: org, pageURL: url, kind: kind, hrefKey: key) { list in
+                add(list); group.leave()
             }
         }
 
-        group.enter()
-        fetchArxiv { list in
-            lock.lock(); collected.append(contentsOf: list); lock.unlock()
-            group.leave()
+        // ② SEC EDGAR：8-K 重大事项 + 13F 机构持仓（官方 Atom）
+        let feeds: [(String, String, String)] = [
+            ("SEC 8-K", "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&owner=include&count=40&output=atom", "filing"),
+            ("SEC 13F", "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=13F-HR&owner=include&count=40&output=atom", "filing"),
+        ]
+        for (org, url, kind) in feeds {
+            group.enter()
+            fetchAtom(org: org, url: url, kind: kind, userAgent: secUA) { list in
+                add(list); group.leave()
+            }
         }
+
+        // ③ 分析师 / 市场 RSS
+        let rss: [(String, String, String)] = [
+            ("Seeking Alpha", "https://seekingalpha.com/market_currents.xml", "analyst"),
+            ("Nasdaq Markets", "https://www.nasdaq.com/feed/rssoutbound?category=Markets", "market"),
+            ("CNBC Finance", "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664", "market"),
+        ]
+        for (org, url, kind) in rss {
+            group.enter()
+            fetchRSS(org: org, url: url, kind: kind) { list in
+                add(list); group.leave()
+            }
+        }
+
+        // ④ 量化论文
+        group.enter()
+        fetchArxiv { list in add(list); group.leave() }
 
         group.notify(queue: .main) {
             var seen = Set<String>()
             var merged: [ResearchItem] = []
-            for it in collected {
-                let key = it.kind + "|" + it.title
+            for it in all {
+                let key = it.kind + "|" + it.title.lowercased()
                 if seen.contains(key) { continue }
                 seen.insert(key)
                 merged.append(it)
@@ -110,126 +140,198 @@ final class ResearchStore: ObservableObject {
             self.fetching = false
             self.lastUpdate = Date()
             if self.items.isEmpty {
-                self.error = failures >= self.eastmoneyTypes.count
-                    ? "研报源连接失败（东财接口可能需要代理），请稍后重试"
-                    : "暂时没有取到研报"
+                self.error = "美股研究源连接失败（可能被网络拦截），稍后重试或挂美国节点"
             }
-            self.translatePaperTitles()
+            self.translateTitles()
             completion?()
         }
     }
 
-    // MARK: 东方财富
+    // MARK: HTML 列表（投行 / 资管公开观点）
 
-    private func fetchEastmoney(qType: String, kind: String, done: @escaping ([ResearchItem]) -> Void) {
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd"
-        let end = df.string(from: Date())
-        let begin = df.string(from: Date().addingTimeInterval(-14 * 86400))
+    private func fetchHTMLList(org: String, pageURL: String, kind: String, hrefKey: String,
+                               done: @escaping ([ResearchItem]) -> Void) {
+        guard let url = URL(string: pageURL) else { done([]); return }
+        var req = URLRequest(url: url, timeoutInterval: 22)
+        req.setValue(browserUA, forHTTPHeaderField: "User-Agent")
+        req.setValue("text/html,application/xhtml+xml,*/*", forHTTPHeaderField: "Accept")
 
-        var comps = URLComponents(string: "https://reportapi.eastmoney.com/report/list")!
-        comps.queryItems = [
-            .init(name: "industryCode", value: "*"),
-            .init(name: "pageSize", value: "40"),
-            .init(name: "industry", value: "*"),
-            .init(name: "rating", value: ""),
-            .init(name: "ratingChange", value: ""),
-            .init(name: "beginTime", value: begin),
-            .init(name: "endTime", value: end),
-            .init(name: "pageNo", value: "1"),
-            .init(name: "fields", value: ""),
-            .init(name: "qType", value: qType),
-            .init(name: "orgCode", value: ""),
-            .init(name: "code", value: "*"),
-            .init(name: "rcode", value: ""),
-            .init(name: "p", value: "1"),
-            .init(name: "pageNum", value: "1"),
-            .init(name: "pageNumber", value: "1"),
-        ]
-        guard let url = comps.url else { done([]); return }
-
-        session.dataTask(with: url) { data, _, _ in
-            guard let data = data,
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let rows = obj["data"] as? [[String: Any]] else {
+        session.dataTask(with: req) { data, _, _ in
+            guard let data = data, let html = String(data: data, encoding: .utf8) else {
                 done([])
                 return
             }
             var out: [ResearchItem] = []
-            for row in rows {
-                guard let title = (row["title"] as? String)?.trimmed, !title.isEmpty else { continue }
-                let org = (row["orgSName"] as? String) ?? ""
-                let rawDate = (row["publishDate"] as? String) ?? ""
-                let date = String(rawDate.prefix(10))
-                let encode = (row["encodeUrl"] as? String) ?? ""
-                let infoCode = (row["infoCode"] as? String) ?? ""
-                let path = self.detailPath[kind] ?? "zw_stock"
-                let urlStr: String
-                if !encode.isEmpty {
-                    urlStr = "https://data.eastmoney.com/report/\(path).jshtml?encodeUrl=\(encode)"
-                } else {
-                    urlStr = "https://data.eastmoney.com/report/\(path).jshtml?infocode=\(infoCode)"
-                }
-                let id = "em_" + (infoCode.isEmpty ? title.md5ish : infoCode)
-                out.append(ResearchItem(id: id, title: title, org: org, date: date,
-                                        url: urlStr, kind: kind))
+            var seen = Set<String>()
+            let re = try? NSRegularExpression(
+                pattern: #"<a[^>]+href="([^"]+)"[^>]*>([\s\S]{5,400}?)</a>"#,
+                options: [.caseInsensitive])
+
+            let ns = html as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            re?.enumerateMatches(in: html, options: [], range: range) { m, _, _ in
+                guard let m = m, m.numberOfRanges >= 3,
+                      let hrefR = Range(m.range(at: 1), in: html),
+                      let textR = Range(m.range(at: 2), in: html) else { return }
+                var href = String(html[hrefR])
+                let raw = String(html[textR])
+                let text = raw.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmed
+                guard text.count >= 28, text.count <= 200 else { return }
+                guard href.contains(hrefKey) || href.hasSuffix(".pdf") else { return }
+                if href.hasPrefix("/") { href = "https://" + (URL(string: pageURL)?.host ?? "") + href }
+                guard href.hasPrefix("http") else { return }
+                if seen.contains(href) { return }
+                seen.insert(href)
+                out.append(ResearchItem(id: "h_" + href.md5ish, title: text, org: org,
+                                        date: Self.todayString(), url: href, kind: kind))
             }
-            done(out)
+            done(Array(out.prefix(12)))
         }.resume()
     }
 
-    // MARK: arXiv（量化金融最新论文）
+    // MARK: Atom（SEC EDGAR）
 
-    private func fetchArxiv(done: @escaping ([ResearchItem]) -> Void) {
-        let s = "http://export.arxiv.org/api/query?search_query=cat:q-fin.*&start=0&max_results=30&sortBy=submittedDate&sortOrder=descending"
-        guard let url = URL(string: s) else { done([]); return }
-        session.dataTask(with: url) { data, _, _ in
+    private func fetchAtom(org: String, url: String, kind: String, userAgent: String,
+                           done: @escaping ([ResearchItem]) -> Void) {
+        guard let u = URL(string: url) else { done([]); return }
+        var req = URLRequest(url: u, timeoutInterval: 22)
+        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        req.setValue("application/atom+xml,application/xml,text/xml,*/*", forHTTPHeaderField: "Accept")
+
+        session.dataTask(with: req) { data, _, _ in
             guard let data = data, let xml = String(data: data, encoding: .utf8) else {
                 done([])
                 return
             }
             var out: [ResearchItem] = []
-            let entries = xml.components(separatedBy: "<entry>")
-            for chunk in entries.dropFirst() {
-                let title = Self.pick(chunk, "title")?.replacingOccurrences(of: "\n", with: " ")
-                    .replacingOccurrences(of: "  ", with: " ").trimmed ?? ""
-                let published = Self.pick(chunk, "published") ?? ""
-                let idURL = Self.pick(chunk, "id") ?? ""
-                guard !title.isEmpty, !idURL.isEmpty else { continue }
-                let date = String(published.prefix(10))
-                out.append(ResearchItem(id: "ax_" + idURL.md5ish, title: title,
-                                        org: "arXiv q-fin", date: date,
-                                        url: idURL, kind: "paper"))
+            let chunks = xml.components(separatedBy: "<entry>")
+            for chunk in chunks.dropFirst().prefix(40) {
+                let title = Self.xml(chunk, "title")?
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmed ?? ""
+                var link = ""
+                if let r = chunk.range(of: #"<link[^>]+href="([^"]+)""#, options: .regularExpression) {
+                    let seg = String(chunk[r])
+                    if let h = seg.range(of: #"href="([^"]+)""#, options: .regularExpression) {
+                        link = String(seg[h]).replacingOccurrences(of: "href=\"", with: "")
+                            .replacingOccurrences(of: "\"", with: "")
+                    }
+                }
+                let updated = Self.xml(chunk, "updated") ?? ""
+                guard !title.isEmpty else { continue }
+                out.append(ResearchItem(id: "s_" + (link.isEmpty ? title.md5ish : link.md5ish),
+                                        title: title, org: org,
+                                        date: String(updated.prefix(10)).isEmpty ? Self.todayString() : String(updated.prefix(10)),
+                                        url: link.isEmpty ? url : link, kind: kind))
             }
-            done(Array(out.prefix(30)))
+            done(out)
         }.resume()
     }
 
-    private static func pick(_ s: String, _ tag: String) -> String? {
+    // MARK: RSS
+
+    private func fetchRSS(org: String, url: String, kind: String,
+                          done: @escaping ([ResearchItem]) -> Void) {
+        guard let u = URL(string: url) else { done([]); return }
+        var req = URLRequest(url: u, timeoutInterval: 20)
+        req.setValue(browserUA, forHTTPHeaderField: "User-Agent")
+        session.dataTask(with: req) { data, _, _ in
+            guard let data = data, let xml = String(data: data, encoding: .utf8) else {
+                done([])
+                return
+            }
+            var out: [ResearchItem] = []
+            for chunk in xml.components(separatedBy: "<item>").dropFirst().prefix(30) {
+                let title = (Self.xml(chunk, "title") ?? "")
+                    .replacingOccurrences(of: "<!\\[CDATA\\[|\\]\\]>", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmed
+                let link = Self.xml(chunk, "link") ?? ""
+                let date = Self.parseRFC822(Self.xml(chunk, "pubDate") ?? "")
+                guard title.count > 20, !link.isEmpty else { continue }
+                out.append(ResearchItem(id: "r_" + link.md5ish, title: title, org: org,
+                                        date: date, url: link, kind: kind))
+            }
+            done(out)
+        }.resume()
+    }
+
+    // MARK: arXiv
+
+    private func fetchArxiv(done: @escaping ([ResearchItem]) -> Void) {
+        let s = "http://export.arxiv.org/api/query?search_query=cat:q-fin.*&start=0&max_results=25&sortBy=submittedDate&sortOrder=descending"
+        guard let url = URL(string: s) else { done([]); return }
+        var req = URLRequest(url: url, timeoutInterval: 25)
+        req.setValue(browserUA, forHTTPHeaderField: "User-Agent")
+        session.dataTask(with: req) { data, _, _ in
+            guard let data = data, let xml = String(data: data, encoding: .utf8) else {
+                done([])
+                return
+            }
+            var out: [ResearchItem] = []
+            for chunk in xml.components(separatedBy: "<entry>").dropFirst().prefix(25) {
+                let title = (Self.xml(chunk, "title") ?? "")
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmed
+                let idURL = Self.xml(chunk, "id") ?? ""
+                let published = Self.xml(chunk, "published") ?? ""
+                guard title.count > 15, !idURL.isEmpty else { continue }
+                out.append(ResearchItem(id: "ax_" + idURL.md5ish, title: title, org: "arXiv q-fin",
+                                        date: String(published.prefix(10)), url: idURL, kind: "paper"))
+            }
+            done(out)
+        }.resume()
+    }
+
+    // MARK: 标题中文化
+
+    private func translateTitles() {
+        // 只翻「本身还是英文」且「还没中文」的条目
+        let todo = items.filter { item in
+            !TextQuality.isTranslated(item.title) && !TextQuality.isTranslated(item.titleZh)
+        }
+        guard !todo.isEmpty else { return }
+        let batch = Array(todo.prefix(40))
+        TranslateService.shared.translate(batch.map { $0.title }) { zh, _ in
+            for (i, it) in batch.enumerated() where i < zh.count {
+                let t = zh[i].trimmingCharacters(in: .whitespacesAndNewlines)
+                guard TextQuality.isTranslated(t), t != it.title else { continue }
+                if let idx = self.items.firstIndex(where: { $0.id == it.id }) {
+                    self.items[idx].titleZh = t
+                }
+            }
+        }
+    }
+
+    // MARK: 工具
+
+    private static func xml(_ s: String, _ tag: String) -> String? {
         guard let a = s.range(of: "<\(tag)"), let b = s.range(of: "</\(tag)>", range: a.upperBound..<s.endIndex) else { return nil }
         var body = String(s[a.upperBound..<b.lowerBound])
         if let gt = body.firstIndex(of: ">") { body = String(body[body.index(after: gt)...]) }
         return body.trimmed
     }
 
-    // MARK: 论文标题中文
+    private static func todayString() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "America/New_York")
+        return f.string(from: Date())
+    }
 
-    private func translatePaperTitles() {
-        let papers = items.filter { $0.kind == "paper" && $0.titleZh.isEmpty }
-        guard !papers.isEmpty else { return }
-        let batch = Array(papers.prefix(20))
-        TranslateService.shared.translate(batch.map { $0.title }) { zh, _ in
-            var changed = false
-            for (i, p) in batch.enumerated() where i < zh.count {
-                let t = zh[i].trimmingCharacters(in: .whitespacesAndNewlines)
-                guard TextQuality.isTranslated(t), t != p.title else { continue }
-                if let idx = self.items.firstIndex(where: { $0.id == p.id }) {
-                    self.items[idx].titleZh = t
-                    changed = true
-                }
-            }
-            _ = changed
+    private static func parseRFC822(_ s: String) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        if let d = f.date(from: s.trimmed) {
+            let o = DateFormatter()
+            o.dateFormat = "yyyy-MM-dd"
+            o.timeZone = TimeZone(identifier: "America/New_York")
+            return o.string(from: d)
         }
+        return todayString()
     }
 }
 
@@ -253,13 +355,12 @@ struct ResearchView: View {
                     if store.loading && store.items.isEmpty {
                         Spacer()
                         ProgressView().tint(Theme.orange)
-                        Text("正在拉取最新研报…")
-                            .font(.system(size: 11)).foregroundColor(Theme.inkDim)
-                            .padding(.top, 10)
+                        Text("正在拉取美股研究…")
+                            .font(.system(size: 11)).foregroundColor(Theme.inkDim).padding(.top, 10)
                         Spacer()
                     } else if filtered.isEmpty {
                         Spacer()
-                        Text(store.error.isEmpty ? "暂无研报" : store.error)
+                        Text(store.error.isEmpty ? "暂无内容" : store.error)
                             .font(.system(size: 12)).foregroundColor(Theme.inkDim)
                             .multilineTextAlignment(.center).padding(.horizontal, 40)
                         Spacer()
@@ -267,10 +368,8 @@ struct ResearchView: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(filtered) { item in
-                                    NavigationLink(value: item) {
-                                        row(item)
-                                    }
-                                    .buttonStyle(.plain)
+                                    NavigationLink(value: item) { row(item) }
+                                        .buttonStyle(.plain)
                                     Hairline().padding(.leading, 18)
                                 }
                             }
@@ -284,28 +383,24 @@ struct ResearchView: View {
             .toolbar(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            if store.items.isEmpty { store.refresh() }
-        }
+        .onAppear { if store.items.isEmpty { store.refresh() } }
     }
 
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
-                Text("研报")
+                Text("美股研究")
                     .font(.system(size: 20, weight: .heavy)).tracking(1.2)
                     .foregroundColor(Theme.ink)
                 HStack(spacing: 6) {
-                    Kicker(text: "东财 + ARXIV", size: 8.5)
+                    Kicker(text: "WALL ST · SEC · ARXIV", size: 8.5)
                     if let t = store.lastUpdate {
-                        Kicker(text: TimeFmt.feedText(Int(t.timeIntervalSince1970)) , size: 8.5)
+                        Kicker(text: TimeFmt.feedText(Int(t.timeIntervalSince1970)), size: 8.5)
                     }
                 }
             }
             Spacer()
-            Button {
-                store.refresh()
-            } label: {
+            Button { store.refresh() } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(Theme.ink)
@@ -353,13 +448,11 @@ struct ResearchView: View {
                     .font(.system(size: 8.5, weight: .black)).tracking(0.8)
                     .foregroundColor(Theme.bg)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(item.kind == "paper" ? Color(red: 0.35, green: 0.55, blue: 0.95) : Theme.orange)
+                    .background(tagColor(item.kind))
                     .clipShape(RoundedRectangle(cornerRadius: 2))
                 Kicker(text: item.date, size: 8.5)
                 Spacer()
-                if item.kind != "paper" {
-                    Kicker(text: item.org, color: Theme.inkDim, size: 8.5)
-                }
+                Kicker(text: item.org, color: Theme.inkDim, size: 8.5)
             }
             Text(item.titleZh.isEmpty ? item.title : item.titleZh)
                 .font(.editorial(16))
@@ -370,12 +463,23 @@ struct ResearchView: View {
                 Text(item.title)
                     .font(.system(size: 10.5))
                     .foregroundColor(Theme.hairline)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18).padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+
+    private func tagColor(_ kind: String) -> Color {
+        switch kind {
+        case "bank": return Color(red: 0.12, green: 0.32, blue: 0.72)
+        case "asset": return Color(red: 0.10, green: 0.48, blue: 0.42)
+        case "filing": return Color(red: 0.45, green: 0.30, blue: 0.62)
+        case "analyst": return Theme.orange
+        case "paper": return Color(red: 0.35, green: 0.55, blue: 0.95)
+        default: return Color(red: 0.35, green: 0.35, blue: 0.38)
+        }
     }
 
     private func pull() async {
@@ -385,7 +489,7 @@ struct ResearchView: View {
     }
 }
 
-// MARK: - 详情（网页 + 自动翻译）
+// MARK: - 详情
 
 struct ResearchDocView: View {
     let item: ResearchItem
@@ -472,10 +576,9 @@ struct ResearchDocView: View {
     }
 }
 
-// MARK: - 小工具
+// MARK: - 工具
 
 extension String {
-    /// 稳定的短哈希（不用 CryptoKit，避免额外依赖）
     var md5ish: String {
         var h: UInt64 = 1469598103934665603
         for b in self.utf8 {
