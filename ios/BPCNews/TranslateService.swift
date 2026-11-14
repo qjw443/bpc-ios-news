@@ -49,6 +49,12 @@ final class TranslateService {
     }()
 
     /// 翻译一组文本（保持顺序）。任一失败则该项回退词典。
+    /// 归一化缓存键：压空白、去首尾标点差异，提高命中率
+    private static func key(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+         .trimmingCharacters(in: CharacterSet(charactersIn: " \"\u{201c}\u{201d}\"'"))
+    }
+
     func translate(_ texts: [String], completion: @escaping ([String], Source) -> Void) {
         guard !texts.isEmpty else { completion([], .none); return }
 
@@ -56,8 +62,9 @@ final class TranslateService {
         var pending: [Int] = []
         lock.lock()
         for (i, t) in texts.enumerated() {
-            if let hit = cache[t], !hit.isEmpty { out[i] = hit }
-            else if let hit = diskCache[t], !hit.isEmpty { out[i] = hit; cache[t] = hit }
+            let k = Self.key(t)
+            if let hit = cache[k], !hit.isEmpty { out[i] = hit }
+            else if let hit = diskCache[k], !hit.isEmpty { out[i] = hit; cache[k] = hit }
             else { pending.append(i) }
         }
         lock.unlock()
@@ -68,7 +75,7 @@ final class TranslateService {
         }
 
         let group = DispatchGroup()
-        let sem = DispatchSemaphore(value: 6)
+        let sem = DispatchSemaphore(value: 8)
         var onlineHit = 0
         let hitLock = NSLock()
 
@@ -81,9 +88,10 @@ final class TranslateService {
                     defer { sem.signal(); group.leave() }
                     if let zh = zh, !zh.isEmpty {
                         out[i] = zh
+                        let k = Self.key(texts[i])
                         self.lock.lock()
-                        self.cache[texts[i]] = zh
-                        self.diskCache[texts[i]] = zh
+                        self.cache[k] = zh
+                        self.diskCache[k] = zh
                         self.lock.unlock()
                         self.persist()
                         hitLock.lock(); onlineHit += 1; hitLock.unlock()
@@ -130,7 +138,8 @@ final class TranslateService {
             guard let data = data, (resp as? HTTPURLResponse)?.statusCode == 200,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [Any],
                   let segs = json.first as? [[Any]] else {
-                done(nil)
+                // 备用端点：MyMemory（免费无 key，单句上限 500 字符）
+                self.fetchMyMemory(t, done: done)
                 return
             }
             var parts: [String] = []

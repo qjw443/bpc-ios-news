@@ -557,7 +557,7 @@ struct FeedView: View {
 
         let visibleFirst = pool.filter { visibleIds.contains($0.id) }
         let rest = pool.filter { !visibleIds.contains($0.id) }
-        let batch = Array((visibleFirst + rest).prefix(40))
+        let batch = Array((visibleFirst + rest).prefix(60))
         guard !batch.isEmpty else { return }
 
         for it in batch { titleTried.insert(it.id) }
