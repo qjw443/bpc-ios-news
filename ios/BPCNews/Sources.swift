@@ -39,8 +39,6 @@ enum Sources {
                  url: "https://feeds.bloomberg.com/economics/news.rss", kind: .rss),
         Endpoint(site: .bloomberg, name: "BBG RSS·Industries",
                  url: "https://feeds.bloomberg.com/industries/news.rss", kind: .rss),
-        Endpoint(site: .bloomberg, name: "BBG RSS·Crypto",
-                 url: "https://feeds.bloomberg.com/crypto/news.rss", kind: .rss),
     ]
 
     /// 路透：官方 sitemap（设备上可能放行），失败则走页面抓取

@@ -127,7 +127,7 @@ final class FeedStore: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 50, execute: watchdog)
 
         roundCount += 1
-        let full = (roundCount % 3 == 1)   // 每 3 轮做一次全量（sitemap + 路透兜底）
+        let full = (roundCount % 2 == 1)   // 每 3 轮做一次全量（sitemap + 路透兜底）
         discovery.poll(full: full) { [weak self] found in
             guard let self = self else { return }
             guard !finished else { return }

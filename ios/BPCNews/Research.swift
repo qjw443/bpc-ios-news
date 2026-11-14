@@ -287,12 +287,21 @@ final class ResearchStore: ObservableObject {
 
     // MARK: 标题中文化
 
+    @Published var translating = false
+
+    /// 供界面定时调用：每轮把还没中文的标题翻一批（持续追上）
+    func translatePendingTitles() {
+        guard !translating else { return }
+        translateTitles()
+    }
+
     private func translateTitles() {
         // 只翻「本身还是英文」且「还没中文」的条目
         let todo = items.filter { item in
             !TextQuality.isTranslated(item.title) && !TextQuality.isTranslated(item.titleZh)
         }
         guard !todo.isEmpty else { return }
+        translating = true
         let batch = Array(todo.prefix(40))
         TranslateService.shared.translate(batch.map { $0.title }) { zh, _ in
             for (i, it) in batch.enumerated() where i < zh.count {
@@ -302,6 +311,7 @@ final class ResearchStore: ObservableObject {
                     self.items[idx].titleZh = t
                 }
             }
+            self.translating = false
         }
     }
 
@@ -384,6 +394,9 @@ struct ResearchView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear { if store.items.isEmpty { store.refresh() } }
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+            store.translatePendingTitles()
+        }
     }
 
     private var header: some View {
@@ -545,7 +558,7 @@ struct ResearchDocView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { translate() }
         }
         .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
-            guard ctl.ready, !busy, rounds < 40 else { return }
+            guard ctl.ready, !busy, rounds < 200 else { return }
             translate()
         }
     }
