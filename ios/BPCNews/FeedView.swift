@@ -122,7 +122,10 @@ struct FeedView: View {
                 }
             }
             .onChange(of: store.items.count) { _ in translateTitles() }
-            .onChange(of: store.newItemsToken) { _ in translateTitles() }
+            .onChange(of: store.newItemsToken) { _ in
+                translateTitles()
+                store.prefetch(Array(filtered.prefix(3)))
+            }
             // 用户要求：每 5 秒自动扫一遍未完成/半成品的翻译
             .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
                 translateTitles()
@@ -142,6 +145,8 @@ struct FeedView: View {
                 store.startMonitoring()
                 if store.items.isEmpty { store.refresh() }
                 translateTitles()
+                // 预取顶部 3 条：点开时正文已在本地
+                store.prefetch(Array(filtered.prefix(3)))
             }
         }
         .tint(Theme.ink)

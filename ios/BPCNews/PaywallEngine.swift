@@ -9,19 +9,21 @@ final class PaywallEngine: NSObject {
 
     private var lists: [String: WKContentRuleList] = [:]
     private var compiling = false
+    private var attemptedSites = Set<String>()
     private var waiting: [() -> Void] = []
 
     // MARK: - 规则编译（一次性，之后复用）
 
     func prepare(_ done: @escaping () -> Void) {
         DispatchQueue.main.async {
-            if self.lists.count >= Site.allCases.count {
+            if self.attemptedSites.count >= Site.allCases.count {
                 done()
                 return
             }
             self.waiting.append(done)
             guard !self.compiling else { return }
             self.compiling = true
+            for st in Site.allCases { self.attemptedSites.insert(st.rawValue) }
             self.compile(Array(Site.allCases), index: 0)
         }
     }
@@ -56,7 +58,8 @@ final class PaywallEngine: NSObject {
 
     func makeConfiguration(site: Site) -> WKWebViewConfiguration {
         let cfg = WKWebViewConfiguration()
-        cfg.websiteDataStore = .nonPersistent()          // 每次都是全新会话 = 清 cookie 的等价物
+        // 持久会话：复用 cf_clearance / 站点同意 cookie，避免每篇都重新过验证（更快，也更像真人）
+        cfg.websiteDataStore = .default()
         cfg.defaultWebpagePreferences.allowsContentJavaScript = true
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
 
@@ -64,16 +67,39 @@ final class PaywallEngine: NSObject {
         if let list = lists["bpc-\(site.rawValue)"] {
             uc.add(list)                                  // ① 拦付费墙 JS
         }
+        // ② 反检测指纹补丁：最早时机注入，先于站点任何脚本
+        uc.addUserScript(WKUserScript(source: Stealth.script,
+                                      injectionTime: .atDocumentStart,
+                                      forMainFrameOnly: false))
         uc.addUserScript(WKUserScript(source: Rules.storageJS,
                                       injectionTime: .atDocumentStart,
-                                      forMainFrameOnly: false))   // ② 清 localStorage
+                                      forMainFrameOnly: false))   // ③ 清 localStorage 计量
         uc.addUserScript(WKUserScript(source: Rules.cleanupJS,
                                       injectionTime: .atDocumentEnd,
-                                      forMainFrameOnly: false))   // ③ 清 DOM / 去模糊
+                                      forMainFrameOnly: false))   // ④ 清 DOM / 去模糊
         return cfg
     }
 
+    // MARK: - WebView 池（省掉每篇 ~100ms 的创建/冷启动）
+
+    private var pool: [String: [WKWebView]] = [:]
+    private let poolLock = NSLock()
+
+    /// 取一个可用的 WebView（优先复用），调用方用完必须 recycle
     func makeWebView(site: Site, userAgent: String) -> WKWebView {
+        poolLock.lock()
+        if var arr = pool[site.rawValue], !arr.isEmpty {
+            let wv = arr.removeLast()
+            pool[site.rawValue] = arr
+            poolLock.unlock()
+            wv.customUserAgent = userAgent
+            return wv
+        }
+        poolLock.unlock()
+        return buildWebView(site: site, userAgent: userAgent)
+    }
+
+    private func buildWebView(site: Site, userAgent: String) -> WKWebView {
         let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844),
                            configuration: makeConfiguration(site: site))
         wv.customUserAgent = userAgent
@@ -82,13 +108,33 @@ final class PaywallEngine: NSObject {
         return wv
     }
 
+    /// 归还 WebView（上限 3/站点），清空内容避免残留上一页的 JS 状态
+    func recycle(_ wv: WKWebView, site: Site) {
+        wv.stopLoading()
+        wv.navigationDelegate = nil
+        wv.scrollView.delegate = nil
+        wv.loadHTMLString("<html><body></body></html>", baseURL: nil)
+        poolLock.lock()
+        var arr = pool[site.rawValue] ?? []
+        if arr.count < 3 { arr.append(wv) }
+        pool[site.rawValue] = arr
+        poolLock.unlock()
+    }
+
+    /// 预热：提前建好一个 WebView，抵消首次创建开销
+    func warmUp(site: Site) {
+        DispatchQueue.main.async {
+            let wv = self.makeWebView(site: site, userAgent: Rules.chromeUA)
+            self.recycle(wv, site: site)
+        }
+    }
+
     /// 请求头：Referer + 语言（对应 BPC 的 modifyHeaders）
     func request(for url: URL, site: Site) -> URLRequest {
-        var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 40)
-        r.setValue("https://www.google.com/", forHTTPHeaderField: "Referer")
-        r.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-        r.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                   forHTTPHeaderField: "Accept")
+        var r = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 30)
+        for (k, v) in Stealth.headers(for: site, url: url) {
+            r.setValue(v, forHTTPHeaderField: k)
+        }
         return r
     }
 
@@ -212,14 +258,29 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
         waitChallengeThenExtract(attempt: 0)
     }
 
+    /// 正文就绪即提取：每 200ms 探一次，最多 4 秒（快于固定等待）
+    private func waitReadyThenExtract(attempt: Int) {
+        guard let wv = webView else { return }
+        wv.evaluateJavaScript(Rules.readyProbe) { [weak self] res, _ in
+            guard let self = self else { return }
+            if (res as? Bool) == true || attempt >= 20 {
+                self.extract()
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.waitReadyThenExtract(attempt: attempt + 1)
+            }
+        }
+    }
+
     private func waitChallengeThenExtract(attempt: Int) {
         guard let wv = webView else { return }
         wv.evaluateJavaScript(Rules.challengeProbe) { [weak self] res, _ in
             guard let self = self else { return }
             let state = (res as? String) ?? "ok"
             if state == "ok" {
-                // 放行后给付费墙脚本一点时间跑，再清理取文
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.extract() }
+                // 放行后：等到正文节点出现就立刻取，不再固定睡 1.2 秒
+                self.waitReadyThenExtract(attempt: 0)
                 return
             }
             if attempt >= 12 {
@@ -340,8 +401,9 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
         let bad = onFail
         onSuccess = nil
         onFail = nil
-        webView?.stopLoading()
-        webView?.navigationDelegate = nil
+        if let wv = webView {
+            PaywallEngine.shared.recycle(wv, site: site)   // 复用，减少下次创建开销
+        }
         webView = nil
         switch result {
         case .success(let a):

@@ -217,6 +217,34 @@ final class FeedStore: ObservableObject {
         }
     }
 
+    // MARK: - 预取（点开即秒开）
+
+    private var prefetching = false
+    private var prefetchQueue: [FeedItem] = []
+
+    /// 为列表顶部的条目提前抓正文：串行执行，避免抢带宽/触发风控
+    func prefetch(_ items: [FeedItem], limit: Int = 3) {
+        guard Settings.autoFetch, !prefetching else { return }
+        let todo = items.prefix(limit).filter {
+            (Library.shared.article(for: $0.id)?.blocks.count ?? 0) < 3 && fetchers[$0.id] == nil
+        }
+        guard !todo.isEmpty else { return }
+        prefetching = true
+        prefetchQueue = Array(todo)
+        runNextPrefetch()
+    }
+
+    private func runNextPrefetch() {
+        guard let next = prefetchQueue.first else {
+            prefetching = false
+            return
+        }
+        prefetchQueue.removeFirst()
+        fetch(item: next, silent: true) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self?.runNextPrefetch() }
+        }
+    }
+
     // MARK: - 已读 / 收藏（统一入口：库与界面同时更新）
 
     func markRead(_ id: String) {

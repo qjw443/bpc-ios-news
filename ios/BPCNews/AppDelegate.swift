@@ -42,6 +42,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         requestNotificationPermission()
         refreshNotificationAuthorization()
         FeedStore.shared.bootstrap()
+        // 预热两个站的 WebView，抵消首次创建开销
+        PaywallEngine.shared.warmUp(site: .reuters)
+        PaywallEngine.shared.warmUp(site: .bloomberg)
         FeedStore.shared.startMonitoring()
         if Settings.keepAlive { SilentKeeper.start() }
         return true

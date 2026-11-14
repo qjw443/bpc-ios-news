@@ -400,6 +400,21 @@ enum Rules {
 
     // MARK: - 文案
 
+    /// 正文是否已就绪（有 Fusion 数据 / 3 段以上长段落 / JSON-LD 含 articleBody）
+    static let readyProbe = #"""
+    (function(){
+      try{
+        if (window.Fusion && window.Fusion.globalContent) return true;
+        var ps=document.querySelectorAll('p'), n=0;
+        for (var i=0;i<ps.length;i++){ if((ps[i].innerText||'').trim().length>60) n++; }
+        if (n>=3) return true;
+        var ld=document.querySelector('script[type="application/ld+json"]');
+        if (ld && (ld.textContent||'').indexOf('articleBody')>=0) return true;
+      }catch(e){}
+      return false;
+    })();
+    """#
+
     /// 在人机验证/拦截页上返回 "challenge" 或 "blocked"，正常页面返回 "ok"
     static let challengeProbe = #"""
     (function(){
