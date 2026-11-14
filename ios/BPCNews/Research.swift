@@ -298,15 +298,21 @@ final class ResearchStore: ObservableObject {
     private func translateTitles() {
         // 只翻「本身还是英文」且「还没中文」的条目
         let todo = items.filter { item in
-            !TextQuality.isTranslated(item.title) && !TextQuality.isTranslated(item.titleZh)
+            !TextQuality.isTranslated(item.title) && !TextQuality.isTranslatedLoose(item.titleZh)
         }
         guard !todo.isEmpty else { return }
         translating = true
         let batch = Array(todo.prefix(40))
         TranslateService.shared.translate(batch.map { $0.title }) { zh, _ in
             for (i, it) in batch.enumerated() where i < zh.count {
-                let t = zh[i].trimmingCharacters(in: .whitespacesAndNewlines)
-                guard TextQuality.isTranslated(t), t != it.title else { continue }
+                var t = zh[i].trimmingCharacters(in: .whitespacesAndNewlines)
+                // 兜底清洗：万一上游还带 URL 编码残留
+                t = t.replacingOccurrences(of: "%20", with: " ")
+                    .replacingOccurrences(of: "%2C", with: ",")
+                    .replacingOccurrences(of: "%3A", with: ":")
+                    .replacingOccurrences(of: "\s+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard TextQuality.isTranslatedLoose(t), t != it.title else { continue }
                 if let idx = self.items.firstIndex(where: { $0.id == it.id }) {
                     self.items[idx].titleZh = t
                 }
@@ -506,6 +512,7 @@ struct ResearchView: View {
 
 struct ResearchDocView: View {
     let item: ResearchItem
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var ctl: WebPageController
     @State private var status = "加载中…"
     @State private var busy = false
@@ -521,6 +528,16 @@ struct ResearchDocView: View {
             Theme.bg.ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(Theme.ink)
+                            .frame(width: 30, height: 30)
+                            .background(Theme.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.kindLabel + " · " + item.org)
                             .font(.system(size: 11, weight: .semibold))
@@ -552,6 +569,7 @@ struct ResearchDocView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .navigationBarBackButtonHidden(true)
         .onAppear { ctl.load() }
         .onChange(of: ctl.ready) { ok in
             guard ok else { return }

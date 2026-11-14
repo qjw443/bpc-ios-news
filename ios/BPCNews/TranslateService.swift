@@ -131,12 +131,19 @@ final class TranslateService {
             guard let data = data,
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let rd = obj["responseData"] as? [String: Any],
-                  let t = rd["translatedText"] as? String,
-                  !t.isEmpty else {
+                  let raw = rd["translatedText"] as? String,
+                  !raw.isEmpty else {
                 done(nil)
                 return
             }
-            done(t)
+            // 关键：MyMemory 返回的是 URL 编码文本（空格会变成 %20），必须解码
+            var t = raw.removingPercentEncoding ?? raw
+            t = t.replacingOccurrences(of: "+", with: " ")
+            if t.lowercased().contains("mymemory warning") || t.contains("QUERY LENGTH LIMIT") {
+                done(nil)
+                return
+            }
+            done(t.trimmingCharacters(in: .whitespacesAndNewlines))
         }.resume()
     }
 

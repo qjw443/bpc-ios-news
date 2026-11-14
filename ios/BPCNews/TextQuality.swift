@@ -25,6 +25,15 @@ enum TextQuality {
         return chineseRatio(t) >= 0.55
     }
 
+    /// 宽松判定：只要含 ≥2 个汉字就算译出（研报标题专有名词多，严格阈值会误杀）
+    static func isTranslatedLoose(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return false }
+        var han = 0
+        for u in t.unicodeScalars where (0x4E00...0x9FFF).contains(u.value) { han += 1 }
+        return han >= 2
+    }
+
     /// 半成品（有中文但比例不够）→ 需要重新翻译
     static func needsRetranslate(_ s: String) -> Bool {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
