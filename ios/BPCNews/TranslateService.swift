@@ -145,8 +145,8 @@ final class TranslateService {
             var usedDict = false
             for i in texts.indices where out[i].isEmpty {
                 let zh = Dict.translate(texts[i])
-                // 只接受「整句基本中文」的词典结果，否则视为失败（返回原文让上层重试）
-                if TextQuality.isTranslated(zh), zh != texts[i] {
+                // 词典只要译出中文就用（哪怕中英混排）——否则在线端点不可达时标题会永远是英文
+                if TextQuality.isTranslatedLoose(zh), zh != texts[i] {
                     out[i] = zh
                     usedDict = true
                 } else {

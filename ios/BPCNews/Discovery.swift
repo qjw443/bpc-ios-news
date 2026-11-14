@@ -241,17 +241,28 @@ final class Discovery: NSObject {
 
     private func scrapeWeb(_ sites: [Site], completion: @escaping ([Discovery.Found]) -> Void) {
         var results: [Discovery.Found] = []
-        let group = DispatchGroup()
+        let lock = NSLock()
+        var tasks: [(Site, String)] = []
         for site in sites {
-            for page in Sources.pages(for: site) {
-                group.enter()
+            for page in Sources.pages(for: site) { tasks.append((site, page)) }
+        }
+        guard !tasks.isEmpty else { completion([]); return }
+
+        let group = DispatchGroup()
+        let sem = DispatchSemaphore(value: 2)   // 最多 2 个 WebView 同时跑，避免爆内存/抢网络
+
+        for (site, page) in tasks {
+            group.enter()
+            DispatchQueue.main.async {          // WKWebView 必须在主线程创建
+                sem.wait()
                 let scraper = WebScraper()
-                scrapers.append(scraper)
+                self.scrapers.append(scraper)
                 scraper.scrape(urlString: page, site: site) { found in
-                    results.append(contentsOf: found)
+                    lock.lock(); results.append(contentsOf: found); lock.unlock()
                     if let i = self.scrapers.firstIndex(where: { $0 === scraper }) {
                         self.scrapers.remove(at: i)
                     }
+                    sem.signal()
                     group.leave()
                 }
             }

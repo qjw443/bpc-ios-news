@@ -58,8 +58,6 @@ enum Sources {
         "https://www.reuters.com/business/",
         "https://www.reuters.com/markets/",
         "https://www.reuters.com/technology/",
-        "https://www.reuters.com/legal/",
-        "https://www.reuters.com/breakingviews/",
     ]
 
     /// 彭博网页兜底（sitemap + RSS 都失败时）
