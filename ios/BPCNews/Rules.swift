@@ -229,17 +229,26 @@ enum Rules {
     (function(){
       var out={title:'',blocks:[],summary:[],audio:'',via:'',walls:[]};
       function clean(s){ return (s||'').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').trim(); }
+
+      // 站点样板 / 页脚 / 公司简介：一旦命中就丢弃（路透 footer 曾整段被当正文）
       function boiler(s){
         return /^(our standards|reporting by|editing by|additional reporting|make sense of|register now|opens new tab|read more|advertisement|sign up|subscribe|follow us)/i.test(s)
           || /thomson reuters trust principle/i.test(s)
-          || /opens new tab/i.test(s)
-          || /^(汤森路透|我们的标准|记者|编辑|注册)/.test(s);
+          || /about reuters|reuters is the news and media division|reuters, the news and media division/i.test(s)
+          || /all quotes delayed|see here for a complete list of exchanges/i.test(s)
+          || /©\s*\d{4}|all rights reserved|保留所有权利/i.test(s)
+          || /^(汤森路透|我们的标准|路透社是汤森路透|记者|编辑|注册|所有报价)/.test(s);
       }
+
+      // ① 先删掉页脚 / 导航 / 相关阅读 / 订阅框，避免污染正文
       try{
-        document.querySelectorAll('[class*="regwall"],[class*="paywall"],[class*="Paywall"],[class*="Regwall"],[data-testid*="paywall"]').forEach(function(e){
-          if(e.offsetHeight>40) out.walls.push((e.className||'').toString().slice(0,50));
-          e.remove();
-        });
+        var junk = 'footer,nav,aside,[role="navigation"],[role="contentinfo"],'
+          + '[class*="footer"],[class*="Footer"],[data-testid*="footer"],'
+          + '[class*="related"],[class*="Related"],[class*="newsletter"],'
+          + '[class*="subscribe"],[class*="promo"],[data-testid*="paywall"],'
+          + '[class*="regwall"],[class*="Regwall"],[class*="Paywall"]';
+        document.querySelectorAll(junk).forEach(function(e){ e.remove(); });
+        // 解除裁剪
         document.querySelectorAll('div,section,article').forEach(function(e){
           var cs=getComputedStyle(e);
           if(cs.maxHeight && cs.maxHeight!=='none' && e.offsetHeight>240){
@@ -252,12 +261,19 @@ enum Rules {
       var h=document.querySelector('h1');
       out.title=clean(h?h.innerText:(document.title||''));
 
-      function push(t){
-        var s=clean(t);
-        if(s.length>30 && !boiler(s)) out.blocks.push({type:'p',text:s});
+      function collect(container){
+        var acc=[], seen={};
+        var nodes=container.querySelectorAll('p,h2,h3,blockquote,li');
+        for(var i=0;i<nodes.length;i++){
+          if(nodes[i].closest('footer,nav,aside')) continue;
+          var t=clean(nodes[i].innerText);
+          if(t.length<30 || boiler(t) || seen[t]) continue;
+          seen[t]=1; acc.push({type:(/^H[23]$/.test(nodes[i].tagName)?'h2':'p'), text:t});
+        }
+        return acc;
       }
 
-      // ② JSON-LD articleBody
+      // ② JSON-LD articleBody（最可靠）
       try{
         document.querySelectorAll('script[type="application/ld+json"]').forEach(function(sc){
           var j=null; try{ j=JSON.parse(sc.textContent); }catch(e){ return; }
@@ -265,31 +281,50 @@ enum Rules {
           arr.forEach(function(o){
             if(!o) return;
             var body=o.articleBody||o.article_body;
-            if(body && body.length>200){
-              var segs=body.split(/\n{2,}/); if(segs.length<3){ segs=body.split(/[.!?]\s+/); } segs.forEach(function(seg){ push(seg); });
-            }
+            if(!body || body.length<200) return;
+            var segs=body.split(/\n{2,}/);
+            if(segs.length<3){ segs=body.split(/[.!?]\s+/); }
+            segs.forEach(function(seg){
+              var t=clean(seg);
+              if(t.length>40 && !boiler(t)) out.blocks.push({type:'p',text:t});
+            });
           });
         });
       }catch(e){}
       if(out.blocks.length>=4){ out.via='jsonld_body'; return JSON.stringify(out); }
 
-      // ③ 宽选择器
+      // ③ 严格容器择优：只认正文容器，绝不回退到 article 全量（footer 就在里面）
       out.blocks=[];
-      var sel=['div[data-testid^="paragraph"]','[data-testid="paragraph"]',
-               'article p','div[class*="article-body"] p','div[class*="ArticleBody"] p',
-               'div[class*="article-content"] p','div[class*="content-body"] p',
-               'div[class*="article__body"] p','main p','body p'];
-      for(var si=0; si<sel.length; si++){
-        var nodes=document.querySelectorAll(sel[si]);
-        if(!nodes.length) continue;
-        var seen={}, acc=[];
-        for(var i=0;i<nodes.length;i++){
-          var t=clean(nodes[i].innerText);
-          if(t.length<=30 || boiler(t) || seen[t]) continue;
-          seen[t]=1; acc.push({type:'p',text:t});
+      var cands=['[data-testid="ArticleBody"]','[data-testid="article-body"]',
+                 '[class*="article-body"]','[class*="ArticleBody"]',
+                 '[class*="article__body"]','[class*="articleBody"]',
+                 '[class*="content-body"]','[class*="story-body"]',
+                 '[class*="body-content"]','[class*="article-content"]'];
+      var best=null, bestLen=0, bestSel='';
+      for(var ci=0; ci<cands.length; ci++){
+        var els=document.querySelectorAll(cands[ci]);
+        for(var ei=0; ei<els.length; ei++){
+          var acc=collect(els[ei]);
+          var len=acc.reduce(function(n,b){ return n+b.text.length; },0);
+          if(acc.length>=3 && len>bestLen){ best=acc; bestLen=len; bestSel='c'+ci; }
         }
-        if(acc.length>=4){ out.blocks=acc; out.via='sel'+si; return JSON.stringify(out); }
+        if(best) break;
       }
+      if(best){ out.blocks=best; out.via=bestSel+'_'+bestLen; return JSON.stringify(out); }
+
+      // ④ 段落 div（Arc XP 常见）：取所有 data-testid=paragraph-N 的公共父容器
+      var ps=document.querySelectorAll('[data-testid^="paragraph"]');
+      if(ps.length>=3){
+        var acc2=[], seen2={};
+        for(var pi=0; pi<ps.length; pi++){
+          var t2=clean(ps[pi].innerText);
+          if(t2.length<30 || boiler(t2) || seen2[t2]) continue;
+          seen2[t2]=1; acc2.push({type:'p',text:t2});
+        }
+        if(acc2.length>=3){ out.blocks=acc2; out.via='paragraph_divs'; return JSON.stringify(out); }
+      }
+
+      // ⑤ 全部失败：返回空，让上层走 archive / 提示（绝不把页脚当正文）
       out.via='none';
       return JSON.stringify(out);
     })();
@@ -326,6 +361,37 @@ enum Rules {
     """#
 
     // MARK: - 文案
+
+    /// 在人机验证/拦截页上返回 "challenge" 或 "blocked"，正常页面返回 "ok"
+    static let challengeProbe = #"""
+    (function(){
+      try{
+        if (document.querySelector('#challenge-form, #cf-challenge-running, .cf-browser-verification,'
+            + ' form[action*="challenge"], #px-captcha, iframe[src*="captcha"], #captcha')) return 'challenge';
+        var t = (document.body ? document.body.innerText : '').slice(0, 4000).toLowerCase();
+        if (/checking your browser|please click the box below|verify you are human|'
+          + 'enable javascript and cookies to continue|cf-browser-verification/.test(t)) return 'challenge';
+        if (/检测到您的计算机|异常活动|请点击下面的方框|确认您不是机器人/.test(t)) return 'challenge';
+        if (/access denied|request blocked|403 forbidden|you have been blocked/.test(t)) return 'blocked';
+      }catch(e){}
+      return 'ok';
+    })();
+    """#
+
+    /// 正文里混进了拦截页文案 / 站点页脚样板 → 该结果不可用
+    static func looksUnusable(_ text: String) -> Bool {
+        let t = text.lowercased()
+        let bad = [
+            "checking your browser", "please click the box below", "verify you are human",
+            "检测到您的计算机", "请点击下面的方框", "确认您不是机器人",
+            "about reuters", "reuters is the news and media division",
+            "thomson reuters trust principle", "all quotes delayed",
+            "our standards", "opens new tab", "保留所有权利"
+        ]
+        var hits = 0
+        for b in bad where t.contains(b) { hits += 1 }
+        return hits >= 2
+    }
 
     static func hint(for site: Site) -> String {
         switch site {

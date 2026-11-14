@@ -208,9 +208,35 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
             finish(.failure(FetchError.loadFailed("打开的是同意页，不是文章")))
             return
         }
-        // 给付费墙脚本一点时间跑，再清理并取文
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
-            self?.extract()
+        // 先探测是否停在人机验证/拦截页；挑战页要等它自己放行（Cloudflare 无感验证通常 3–8 秒）
+        waitChallengeThenExtract(attempt: 0)
+    }
+
+    private func waitChallengeThenExtract(attempt: Int) {
+        guard let wv = webView else { return }
+        wv.evaluateJavaScript(Rules.challengeProbe) { [weak self] res, _ in
+            guard let self = self else { return }
+            let state = (res as? String) ?? "ok"
+            if state == "ok" {
+                // 放行后给付费墙脚本一点时间跑，再清理取文
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.extract() }
+                return
+            }
+            if attempt >= 12 {
+                // 挑战没放过：先试 archive 镜像，仍不行才报错（并指引用网页模式）
+                if !self.archiveTried {
+                    self.archiveFallback()
+                    return
+                }
+                let msg = state == "challenge"
+                    ? "被站点人机验证拦截，请点右上角地球图标用网页模式手动通过"
+                    : "被站点拒绝访问（可能触发风控），请稍后重试或改用网页模式"
+                self.finish(.failure(FetchError.loadFailed(msg)))
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.waitChallengeThenExtract(attempt: attempt + 1)
+            }
         }
     }
 
@@ -250,6 +276,13 @@ final class ArticleFetcher: NSObject, WKNavigationDelegate {
             let rawCount = (raw?.blocks ?? []).filter { $0.type != "img" }.count
             if rawCount < 3 && !self.archiveTried {
                 self.archiveFallback()
+                return
+            }
+            // 拦截页文案 / 站点页脚样板混入正文 → 视为抓取失败，先试 archive
+            let joined = blocks.map { $0.text }.joined(separator: " ")
+            if Rules.looksUnusable(joined) {
+                if !self.archiveTried { self.archiveFallback(); return }
+                self.finish(.failure(FetchError.loadFailed("抓到的是验证页或站点页脚，请用网页模式")))
                 return
             }
             if rawCount < 3 {
